@@ -113,22 +113,76 @@ struct ArtworkView: View {
     }
 }
 
-struct EqualizerView: View {
+/// Dancing bars. Animated by Core Animation in the window server, so the app
+/// does no work per frame (the old SwiftUI version redrew 60–120×/s).
+struct EqualizerView: NSViewRepresentable {
     let isPlaying: Bool
     let color: Color
 
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 12, paused: !isPlaying)) { ctx in
-            let t = ctx.date.timeIntervalSinceReferenceDate
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<4, id: \.self) { i in
-                    let phase = sin(t * (5 + Double(i) * 1.7) + Double(i))
-                    Capsule()
-                        .fill(color)
-                        .frame(width: 3, height: isPlaying ? 4 + 10 * CGFloat((phase + 1) / 2) : 3)
-                }
+    func makeNSView(context: Context) -> EqualizerLayerView { EqualizerLayerView() }
+
+    func updateNSView(_ view: EqualizerLayerView, context: Context) {
+        view.update(playing: isPlaying, color: NSColor(color))
+    }
+}
+
+final class EqualizerLayerView: NSView {
+    private var bars: [CALayer] = []
+    private var animating = false
+    private let durations: [CFTimeInterval] = [0.42, 0.31, 0.55, 0.37]
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.masksToBounds = false
+        for _ in 0..<4 {
+            let bar = CALayer()
+            bar.cornerRadius = 1.5
+            layer?.addSublayer(bar)
+            bars.append(bar)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let w: CGFloat = 3, gap: CGFloat = 2
+        let total = CGFloat(bars.count) * w + CGFloat(bars.count - 1) * gap
+        var x = (bounds.width - total) / 2
+        for bar in bars {
+            bar.bounds = CGRect(x: 0, y: 0, width: w, height: bounds.height)
+            bar.position = CGPoint(x: x + w / 2, y: bounds.midY)
+            x += w + gap
+        }
+        CATransaction.commit()
+    }
+
+    func update(playing: Bool, color: NSColor) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bars.forEach { $0.backgroundColor = color.cgColor }
+        CATransaction.commit()
+        guard playing != animating else { return }
+        animating = playing
+        for (i, bar) in bars.enumerated() {
+            if playing {
+                let a = CABasicAnimation(keyPath: "transform.scale.y")
+                a.fromValue = 0.25
+                a.toValue = 1.0
+                a.duration = durations[i]
+                a.autoreverses = true
+                a.repeatCount = .infinity
+                a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                a.beginTime = CACurrentMediaTime() + Double(i) * 0.09
+                bar.add(a, forKey: "eq")
+                bar.transform = CATransform3DIdentity
+            } else {
+                bar.removeAnimation(forKey: "eq")
+                bar.transform = CATransform3DMakeScale(1, 0.22, 1)
             }
-            .animation(.easeInOut(duration: 1 / 12), value: t)
         }
     }
 }

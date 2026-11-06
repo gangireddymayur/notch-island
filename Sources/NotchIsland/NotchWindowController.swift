@@ -81,11 +81,15 @@ final class NotchWindowController {
         // edge is never missed, even if an event gets lost.
         hoverPoll = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self else { return }
+                guard let self, let screen = self.screen else { return }
                 let p = NSEvent.mouseLocation
-                if p != self.lastPointer { self.lastPointer = p; self.mouseMoved() }
+                guard p != self.lastPointer else { return }
+                self.lastPointer = p
+                // Only matters near the top of the screen or while the island is open.
+                if p.y > screen.frame.maxY - 260 || self.model.isHovering { self.mouseMoved() }
             }
         }
+        hoverPoll?.tolerance = 0.05
         model.$mode.receive(on: DispatchQueue.main).sink { [weak self] _ in
             self?.updateMouseCapture()
         }.store(in: &bag)

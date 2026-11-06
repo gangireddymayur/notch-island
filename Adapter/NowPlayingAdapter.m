@@ -227,9 +227,10 @@ void nis_stream(void *perl, void *cv) {
         }];
     }
 
-    // Fallback poll (output is deduped), and exit if the app went away.
+    // Backup check every 2.5 s (changes normally arrive as notifications);
+    // output is deduped. Also exits if the app went away.
     dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, stateQueue);
-    dispatch_source_set_timer(timer, DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC, 200 * NSEC_PER_MSEC);
+    dispatch_source_set_timer(timer, DISPATCH_TIME_NOW, 2500 * NSEC_PER_MSEC, 500 * NSEC_PER_MSEC);
     dispatch_source_set_event_handler(timer, ^{
         if (getppid() != parent) exit(0);
         refresh();

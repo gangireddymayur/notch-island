@@ -37,10 +37,10 @@ final class NotificationsService {
         }
         // Backup check; the real trigger is the Accessibility observer below,
         // which fires the moment Notification Center adds a banner.
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.scan() }
         }
-        timer?.tolerance = 0.2
+        timer?.tolerance = 0.5
     }
 
     // MARK: Instant detection
