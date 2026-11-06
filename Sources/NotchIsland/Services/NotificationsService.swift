@@ -23,19 +23,67 @@ final class NotificationsService {
     private var primed = false
     private var loggedShape = false
     private var loggedUntrusted = false
+    private var observer: AXObserver?
+    private var observedPid: pid_t = 0
 
     func setEnabled(_ on: Bool) {
         timer?.invalidate(); timer = nil
+        stopObserving()
         primed = false
         seen = [:]
         guard on else { return }
         if !AXIsProcessTrusted() {
             AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
         }
+        // Backup check; the real trigger is the Accessibility observer below,
+        // which fires the moment Notification Center adds a banner.
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.scan() }
         }
         timer?.tolerance = 0.2
+    }
+
+    // MARK: Instant detection
+
+    private func ensureObserver(pid: pid_t, app: AXUIElement) {
+        guard observer == nil || observedPid != pid else { return }
+        stopObserving()
+        var obs: AXObserver?
+        let callback: AXObserverCallback = { _, _, _, refcon in
+            guard let refcon else { return }
+            let me = Unmanaged<NotificationsService>.fromOpaque(refcon).takeUnretainedValue()
+            MainActor.assumeIsolated { me.bannerEvent() }
+        }
+        guard AXObserverCreate(pid, callback, &obs) == .success, let obs else { return }
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        for name in [kAXWindowCreatedNotification, kAXCreatedNotification, kAXLayoutChangedNotification] {
+            AXObserverAddNotification(obs, app, name as CFString, refcon)
+        }
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
+        observer = obs
+        observedPid = pid
+    }
+
+    private func stopObserving() {
+        if let observer {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
+        }
+        observer = nil
+        observedPid = 0
+    }
+
+    private var burstPending = false
+
+    /// Scan right away, then again shortly after — banner text can arrive a
+    /// moment after the banner itself.
+    private func bannerEvent() {
+        guard !burstPending else { return }
+        burstPending = true
+        scan()
+        for delay in [0.08, 0.2] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.scan() }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.burstPending = false }
     }
 
     private func scan() {
@@ -49,6 +97,7 @@ final class NotificationsService {
         else { return }
         let app = AXUIElementCreateApplication(nc.processIdentifier)
         AXUIElementSetMessagingTimeout(app, 0.3)
+        ensureObserver(pid: nc.processIdentifier, app: app)
 
         var banners: [AXUIElement] = []
         for window in Self.elements(app, kAXWindowsAttribute) {
