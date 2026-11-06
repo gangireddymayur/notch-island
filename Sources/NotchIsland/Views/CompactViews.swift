@@ -13,12 +13,12 @@ struct CompactMusicView: View {
         HStack(spacing: 0) {
             ArtworkView(image: shown?.artwork, bundleId: shown?.bundleId, size: height - 10, corner: 6, showBadge: false)
                 .wing(.left)
-                .padding(.leading, 6)
+                .padding(.leading, 4)
             Spacer(minLength: notchWidth)
             EqualizerView(isPlaying: shown?.isPlaying ?? false, color: AppSettings.shared.accent.color)
                 .frame(width: 18, height: 14)
                 .wing(.right)
-                .padding(.trailing, 10)
+                .padding(.trailing, 6)
         }
         .frame(height: height)
     }

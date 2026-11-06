@@ -279,7 +279,8 @@ final class NotchViewModel: ObservableObject {
         case .closed:
             return CGSize(width: n.width - 2 * Self.earRadius, height: n.height)
         case .compact(.music):
-            return CGSize(width: n.width + 2 * (n.height + 12), height: n.height)
+            // Narrow wings: artwork and equalizer sit right beside the notch.
+            return CGSize(width: n.width + 2 * (n.height + 2), height: n.height)
         case .compact:
             return CGSize(width: n.width + 2 * 70, height: n.height)
         case .expanded:
