@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ImageIO
 import QuickLookThumbnailing
 import UniformTypeIdentifiers
 
@@ -230,16 +231,6 @@ struct ShelfTile: View {
     var body: some View {
         VStack(spacing: 4) {
             FileThumbnail(url: url, width: 96, height: 60)
-                .overlay(alignment: .bottomTrailing) {
-                    if isScreenshot {
-                        Image(systemName: "camera.viewfinder")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(3)
-                            .background(Circle().fill(.black.opacity(0.7)))
-                            .offset(x: 4, y: 4)
-                    }
-                }
             Text(displayName)
                 .font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.8))
                 .lineLimit(1).truncationMode(.middle)
@@ -297,6 +288,7 @@ struct FileThumbnail: View {
                 // Real previews fill the whole tile.
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
                     .frame(width: width, height: height)
+                    .clipped()
             } else {
                 RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(0.06))
                 Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
@@ -312,17 +304,36 @@ struct FileThumbnail: View {
 
 @MainActor
 enum Thumbnails {
-    private static var cache: [URL: NSImage] = [:]
+    private static var cache: [String: NSImage] = [:]
 
     static func image(for url: URL, size: CGFloat) async -> NSImage? {
-        if let hit = cache[url] { return hit }
-        let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: size, height: size),
-                                                   scale: 2, representationTypes: .thumbnail)
-        guard let rep = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) else { return nil }
-        let img = rep.nsImage
+        let key = "\(url.path)#\(Int(size))"
+        if let hit = cache[key] { return hit }
+        let img: NSImage?
+        if let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image) {
+            // Pictures: decode the image itself (no Quick Look frame), so it can
+            // fill the tile right to its rounded corners.
+            img = await Task.detached { imageThumbnail(url, maxPixels: Int(size * 3)) }.value
+        } else {
+            let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: size, height: size),
+                                                       scale: 2, representationTypes: .thumbnail)
+            img = (try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request))?.nsImage
+        }
+        guard let img else { return nil }
         if cache.count > 200 { cache.removeAll() }
-        cache[url] = img
+        cache[key] = img
         return img
+    }
+
+    nonisolated private static func imageThumbnail(_ url: URL, maxPixels: Int) -> NSImage? {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixels,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
 }
 
