@@ -287,7 +287,7 @@ final class NotchViewModel: ObservableObject {
             let content: CGFloat = switch page {
             case .media: 120
             case .calendar: 124
-            case .shelf: 132
+            case .shelf: 110
             case .timer: 112
             }
             let extra = settings.islandWidth.extra
