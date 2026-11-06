@@ -16,9 +16,16 @@ cp "$(swift build -c release --show-bin-path)/NotchIsland" "$APP/Contents/MacOS/
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp build/NowPlayingAdapter.dylib Adapter/adapter.pl "$APP/Contents/Resources/"
 
-# Ad-hoc signature: fine for your own Mac, nothing leaves the machine.
-codesign --force --sign - "$APP/Contents/Resources/NowPlayingAdapter.dylib"
-codesign --force --sign - "$APP"
+# Signing: put a code-signing identity (name or SHA-1 from
+# `security find-identity -v -p codesigning`) in .signing-identity (git-ignored)
+# so macOS keeps your Accessibility / Calendar permissions across rebuilds.
+# Without it the app is signed ad-hoc, which works but resets permissions
+# every build.
+IDENTITY="-"
+if [[ -f .signing-identity ]]; then IDENTITY="$(tr -d '[:space:]' < .signing-identity)"; fi
+codesign --force --sign "$IDENTITY" "$APP/Contents/Resources/NowPlayingAdapter.dylib"
+codesign --force --sign "$IDENTITY" "$APP"
+[[ "$IDENTITY" == "-" ]] && echo "Signed ad-hoc" || echo "Signed with $IDENTITY"
 echo "Built $APP"
 
 if [[ "${1:-}" == "--install" ]]; then

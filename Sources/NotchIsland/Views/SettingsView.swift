@@ -140,16 +140,24 @@ private struct SettingsDetail: View {
             }
 
         case .battery:
-            Section("Plugging in") {
+            Section("MacBook \u{00B7} plugging in") {
                 Toggle("Charging animation", isOn: $settings.chargingCard)
                 LabeledContent("Show for \(settings.chargingSeconds, specifier: "%.1f") s") {
                     Slider(value: $settings.chargingSeconds, in: 2...10, step: 0.5).frame(width: 220)
                 }
                 .disabled(!settings.chargingCard)
-            }
-            Section("Alerts") {
-                Toggle("Low battery warnings at 20% and 10%", isOn: $settings.lowBatteryAlerts)
                 Toggle("\u{201C}Fully charged\u{201D} card", isOn: $settings.fullChargeCard)
+            }
+            Section("MacBook \u{00B7} low battery") {
+                Toggle("Low battery warnings", isOn: $settings.lowBatteryAlerts)
+                alertPicker("First warning at", $settings.macAlert1).disabled(!settings.lowBatteryAlerts)
+                alertPicker("Second warning at", $settings.macAlert2).disabled(!settings.lowBatteryAlerts)
+            }
+            Section("Logitech headset") {
+                Toggle("Show Logitech G headset battery", isOn: $settings.logitechHeadset)
+                headsetStatus
+                alertPicker("First warning at", $settings.headsetAlert1).disabled(!settings.logitechHeadset)
+                alertPicker("Second warning at", $settings.headsetAlert2).disabled(!settings.logitechHeadset)
             }
             Section("Try it") {
                 HStack {
@@ -235,12 +243,14 @@ private struct SettingsDetail: View {
         case .notifications:
             Section {
                 Toggle("Show notifications in the island", isOn: $settings.notificationsEnabled)
+                Toggle("Close the macOS banner when it\u{2019}s shown in the island", isOn: $settings.hideSystemBanners)
+                    .disabled(!settings.notificationsEnabled)
                 LabeledContent("Show for \(settings.notificationSeconds, specifier: "%.1f") s") {
                     Slider(value: $settings.notificationSeconds, in: 3...12, step: 0.5).frame(width: 220)
                 }
                 .disabled(!settings.notificationsEnabled)
             } footer: {
-                Text("Reads the text of macOS notification banners via Accessibility. Keep banners on in System Settings \u{2192} Notifications. Nothing is stored or sent anywhere.")
+                Text("Reads the text of macOS notification banners via Accessibility. Keep banners on in System Settings \u{2192} Notifications \u{2014} Notch Island closes each one as soon as it\u{2019}s in the island, and it stays in Notification Center. Nothing is stored or sent anywhere.")
             }
             if settings.notificationsEnabled { Section("Permission") { accessibilityRow } }
             Section("Try it") {
@@ -317,6 +327,13 @@ private struct SettingsDetail: View {
             Button("Notification") { previewNotification() }
             Button("Bluetooth") { previewBluetooth() }
             Button("Timer done") { model.show(.timerDone("Focus"), for: 6) }
+        }
+    }
+
+    private func alertPicker(_ title: String, _ value: Binding<Int>) -> some View {
+        Picker(title, selection: value) {
+            ForEach(AppSettings.alertLevels, id: \.self) { Text("\($0)%").tag($0) }
+            Text("Off").tag(0)
         }
     }
 

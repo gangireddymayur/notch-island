@@ -47,7 +47,7 @@ final class NotificationsService {
         for window in Self.elements(app, kAXWindowsAttribute) {
             Self.collectBanners(window, depth: 0, into: &banners)
         }
-        let parsed = banners.compactMap(Self.parse)
+        let parsed = banners.compactMap { el in Self.parse(el).map { (key: $0.key, note: $0.note, element: el) } }
 
         let now = Date()
         seen = seen.filter { now.timeIntervalSince($0.value) < 120 }
@@ -58,7 +58,45 @@ final class NotificationsService {
         guard primed else { primed = true; return }
         // Many items at once means you opened Notification Center itself.
         guard parsed.count <= 3 else { return }
-        for p in fresh { onNotification?(p.note) }
+        for p in fresh {
+            onNotification?(p.note)
+            // Don't show it twice: close Apple's banner (it stays in Notification Center).
+            if AppSettings.shared.hideSystemBanners { Self.close(p.element) }
+        }
+    }
+
+    /// Uses the banner's own "Close" action — never "Clear", which would
+    /// delete it from Notification Center.
+    private static func close(_ banner: AXUIElement) {
+        var names: CFArray?
+        AXUIElementCopyActionNames(banner, &names)
+        let actions = names as? [String] ?? []
+        let isClose: (String) -> Bool = {
+            $0.localizedCaseInsensitiveContains("close") && !$0.localizedCaseInsensitiveContains("clear")
+        }
+        if let action = actions.first(where: isClose) {
+            AXUIElementPerformAction(banner, action as CFString)
+            return
+        }
+        // Some versions put a close button inside the banner instead.
+        if let button = findButton(in: banner, depth: 0, matching: isClose) {
+            AXUIElementPerformAction(button, kAXPressAction as CFString)
+            return
+        }
+        // Action names only (no notification content) to help troubleshoot.
+        DebugLog.write("notifications: no close action; actions=\(actions.map { $0.components(separatedBy: "\n").first ?? $0 })")
+    }
+
+    private static func findButton(in el: AXUIElement, depth: Int, matching: (String) -> Bool) -> AXUIElement? {
+        guard depth < 6 else { return nil }
+        for child in elements(el, kAXChildrenAttribute) {
+            let role: String = attr(child, kAXRoleAttribute) ?? ""
+            let label = [attr(child, kAXDescriptionAttribute) as String?, attr(child, kAXTitleAttribute) as String?,
+                         attr(child, kAXIdentifierAttribute) as String?].compactMap { $0 }.joined(separator: " ")
+            if role == kAXButtonRole as String, matching(label) { return child }
+            if let found = findButton(in: child, depth: depth + 1, matching: matching) { return found }
+        }
+        return nil
     }
 
     // MARK: AX helpers

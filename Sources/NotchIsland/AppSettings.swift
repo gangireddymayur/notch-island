@@ -55,6 +55,10 @@ final class AppSettings: ObservableObject {
     @Published var chargingSeconds: Double { didSet { save(chargingSeconds, "chargingSeconds") } }
     @Published var lowBatteryAlerts: Bool { didSet { save(lowBatteryAlerts, "lowBatteryAlerts") } }
     @Published var fullChargeCard: Bool { didSet { save(fullChargeCard, "fullChargeCard") } }
+    @Published var macAlert1: Int { didSet { save(macAlert1, "macAlert1") } }          // 0 = off
+    @Published var macAlert2: Int { didSet { save(macAlert2, "macAlert2") } }
+    @Published var headsetAlert1: Int { didSet { save(headsetAlert1, "headsetAlert1") } }
+    @Published var headsetAlert2: Int { didSet { save(headsetAlert2, "headsetAlert2") } }
 
     // Shelf
     @Published var shelfEnabled: Bool { didSet { save(shelfEnabled, "shelfEnabled") } }
@@ -72,6 +76,7 @@ final class AppSettings: ObservableObject {
     // Notifications
     @Published var notificationsEnabled: Bool { didSet { save(notificationsEnabled, "notificationsEnabled") } } // Accessibility
     @Published var notificationSeconds: Double { didSet { save(notificationSeconds, "notificationSeconds") } }
+    @Published var hideSystemBanners: Bool { didSet { save(hideSystemBanners, "hideSystemBanners") } }
 
     // Calendar
     @Published var calendarEnabled: Bool { didSet { save(calendarEnabled, "calendarEnabled") } }       // Calendars
@@ -81,6 +86,7 @@ final class AppSettings: ObservableObject {
     @Published var bluetoothEnabled: Bool { didSet { save(bluetoothEnabled, "bluetoothEnabled") } }    // Bluetooth
     @Published var logitechHeadset: Bool { didSet { save(logitechHeadset, "logitechHeadset") } }        // no permission
 
+    static let alertLevels = [50, 40, 30, 25, 20, 15, 10, 5]
     static let timerSounds = ["Glass", "Ping", "Hero", "Submarine", "Funk", "Purr", "Tink"]
 
     private init() {
@@ -105,6 +111,10 @@ final class AppSettings: ObservableObject {
         chargingSeconds = n("chargingSeconds", 4.5)
         lowBatteryAlerts = b("lowBatteryAlerts", true)
         fullChargeCard = b("fullChargeCard", true)
+        macAlert1 = i("macAlert1", 20)
+        macAlert2 = i("macAlert2", 10)
+        headsetAlert1 = i("headsetAlert1", 20)
+        headsetAlert2 = i("headsetAlert2", 10)
 
         shelfEnabled = b("shelfEnabled", true)
         recentScreenshots = b("recentScreenshots", true)
@@ -118,6 +128,7 @@ final class AppSettings: ObservableObject {
 
         notificationsEnabled = b("notificationsEnabled", false)
         notificationSeconds = n("notificationSeconds", 5.5)
+        hideSystemBanners = b("hideSystemBanners", true)
 
         calendarEnabled = b("calendarEnabled", false)
         meetingLeadMinutes = i("meetingLeadMinutes", 10)

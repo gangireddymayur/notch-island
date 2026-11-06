@@ -227,7 +227,8 @@ final class NotchViewModel: ObservableObject {
     private func batteryChanged(old: BatteryState, new: BatteryState) {
         if new.onAC && !old.onAC, settings.chargingCard { show(.charging, for: settings.chargingSeconds) }
         if !new.onAC, settings.lowBatteryAlerts {
-            for level in [20, 10] where old.percent > level && new.percent <= level {
+            let levels = [settings.macAlert1, settings.macAlert2].filter { $0 > 0 }
+            for level in levels where old.percent > level && new.percent <= level {
                 show(.lowBattery(new.percent), for: 6)
             }
         }

@@ -25,7 +25,7 @@ final class LogitechHeadsetService: ObservableObject {
 
     /// Fires when the headset is switched on / off (after launch).
     var onConnectionChange: ((Headset) -> Void)?
-    /// Fires once when the battery drops to 20% and again at 10%.
+    /// Fires once at each low-battery level chosen in Settings.
     var onLowBattery: ((Headset) -> Void)?
 
     private var manager: IOHIDManager?
@@ -37,6 +37,12 @@ final class LogitechHeadsetService: ObservableObject {
     private var warned: Set<Int> = []
     private var badReadings = 0
     private var recent: [Int] = []
+    /// The on/off state we last told you about. A card only appears once the
+    /// headset has stayed in a new state for a few seconds (switching on makes
+    /// the receiver reconnect and briefly report errors).
+    private var announced: Bool?
+    private var announceWork: DispatchWorkItem?
+    private var lastName = "Logitech Headset"
 
     func setEnabled(_ on: Bool) {
         stop()
@@ -70,7 +76,11 @@ final class LogitechHeadsetService: ObservableObject {
         poll = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.query() }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.ready = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self else { return }
+            self.ready = true
+            self.announced = self.headset?.online ?? false
+        }
     }
 
     func stop() {
@@ -84,6 +94,8 @@ final class LogitechHeadsetService: ObservableObject {
         featureIndex = nil
         headset = nil
         ready = false
+        announced = nil
+        announceWork?.cancel(); announceWork = nil
     }
 
     // MARK: Device lifecycle
@@ -94,7 +106,8 @@ final class LogitechHeadsetService: ObservableObject {
         DebugLog.write("headset: receiver found")
         let product = IOHIDDeviceGetProperty(d, kIOHIDProductKey as CFString) as? String ?? "Logitech Headset"
         let name = product.replacingOccurrences(of: " Gaming Headset", with: "")
-        headset = Headset(name: "Logitech \(name)", online: false, percent: nil, charging: false, full: false)
+        lastName = "Logitech \(name)"
+        headset = Headset(name: lastName, online: false, percent: nil, charging: false, full: false)
 
         let ctx = Unmanaged.passUnretained(self).toOpaque()
         IOHIDDeviceRegisterInputReportCallback(d, reportBuffer, 64, { ctx, _, _, _, _, report, length in
@@ -112,12 +125,27 @@ final class LogitechHeadsetService: ObservableObject {
         guard d == device else { return }
         device = nil
         featureIndex = nil
-        if var h = headset, h.online {
-            h.online = false
-            headset = h
-            if ready { onConnectionChange?(h) }
-        }
         headset = nil
+        recent = []
+        DebugLog.write("headset: receiver/headset disconnected")
+        scheduleAnnounce()
+    }
+
+    private func scheduleAnnounce() {
+        guard ready else { return }
+        announceWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let online = self.headset?.online ?? false
+            guard online != self.announced else { return }
+            self.announced = online
+            var snap = self.headset ?? Headset(name: self.lastName, online: false, percent: nil, charging: false, full: false)
+            snap.online = online
+            DebugLog.write("headset: announce \(online ? "connected" : "turned off")")
+            self.onConnectionChange?(snap)
+        }
+        announceWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
     }
 
     // MARK: HID++
@@ -145,7 +173,7 @@ final class LogitechHeadsetService: ObservableObject {
 
         // Error reply (e.g. headset switched off): 11 FF FF …
         if r[2] == 0xFF {
-            if featureIndex != nil { update(online: false, voltage: 0, flags: 0) }
+            if featureIndex != nil { badReading() }
             return
         }
         // Reply to our feature lookup.
@@ -163,8 +191,7 @@ final class LogitechHeadsetService: ObservableObject {
         guard (3000...4500).contains(voltage), [0x01, 0x03, 0x07].contains(flags) else {
             // The receiver sometimes returns a garbled reading; only treat it as
             // "switched off" if it keeps happening.
-            badReadings += 1
-            if badReadings >= 3 { update(online: false, voltage: 0, flags: 0) }
+            badReading()
             return
         }
         badReadings = 0
@@ -172,6 +199,12 @@ final class LogitechHeadsetService: ObservableObject {
         recent.append(voltage)
         if recent.count > 5 { recent.removeFirst() }
         update(online: true, voltage: recent.reduce(0, +) / recent.count, flags: flags)
+    }
+
+    private func badReading() {
+        badReadings += 1
+        if badReadings >= 3 { update(online: false, voltage: 0, flags: 0) }
+        else { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.query() } }
     }
 
     private func update(online: Bool, voltage: Int, flags: UInt8) {
@@ -188,10 +221,11 @@ final class LogitechHeadsetService: ObservableObject {
         if !online { recent = [] }
         if wasOnline != online {
             if online { warned = [] }
-            if ready { onConnectionChange?(h) }
+            if ready { scheduleAnnounce() } else { announced = online }
         }
         if online, !h.charging, let p = h.percent {
-            for level in [20, 10] where p <= level && !warned.contains(level) {
+            let levels = [AppSettings.shared.headsetAlert1, AppSettings.shared.headsetAlert2].filter { $0 > 0 }
+            for level in levels where p <= level && !warned.contains(level) {
                 warned.insert(level)
                 if ready { onLowBattery?(h) }
             }
