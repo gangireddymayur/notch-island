@@ -295,11 +295,9 @@ private struct SettingsDetail: View {
         case .about:
             Section {
                 HStack(spacing: 16) {
-                    Image(systemName: "capsule.fill")
-                        .font(.system(size: 30))
-                        .foregroundStyle(.white)
-                        .frame(width: 64, height: 64)
-                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.black))
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 72, height: 72)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Notch Island").font(.title2.bold())
                         Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "\u{2013}")")

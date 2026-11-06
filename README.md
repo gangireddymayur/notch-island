@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🏝️ Notch Island
+<img src="docs/icon.png" width="160" alt="Notch Island icon">
+
+# Notch Island
 
 **A Dynamic Island for your MacBook's notch — native, tiny, private.**
 

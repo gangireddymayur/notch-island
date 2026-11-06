@@ -14,7 +14,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$(swift build -c release --show-bin-path)/NotchIsland" "$APP/Contents/MacOS/NotchIsland"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
-cp build/NowPlayingAdapter.dylib Adapter/adapter.pl "$APP/Contents/Resources/"
+cp build/NowPlayingAdapter.dylib Adapter/adapter.pl Resources/AppIcon.icns "$APP/Contents/Resources/"
 
 # Signing: put a code-signing identity (name or SHA-1 from
 # `security find-identity -v -p codesigning`) in .signing-identity (git-ignored)
