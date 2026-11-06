@@ -16,6 +16,9 @@ final class NotchPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         isMovable = false
         ignoresMouseEvents = true
+        // Without this, mouse-moved events stop arriving once the pointer is
+        // over the island, and the hover could be missed.
+        acceptsMouseMovedEvents = true
     }
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
@@ -34,6 +37,8 @@ final class NotchWindowController {
     private var monitors: [Any] = []
     private var bag = Set<AnyCancellable>()
     private var collapseWork: DispatchWorkItem?
+    private var hoverPoll: Timer?
+    private var lastPointer = NSPoint.zero
 
     /// Window is a fixed canvas; the island animates inside it.
     private let canvas = CGSize(width: 760, height: 260)
@@ -71,6 +76,15 @@ final class NotchWindowController {
         if let g = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: down) { monitors.append(g) }
         if let l = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown, handler: { e in down(e); return e }) {
             monitors.append(l)
+        }
+        // Backup: a cheap 10×/s pointer check so a fast flick to the top
+        // edge is never missed, even if an event gets lost.
+        hoverPoll = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let p = NSEvent.mouseLocation
+                if p != self.lastPointer { self.lastPointer = p; self.mouseMoved() }
+            }
         }
         model.$mode.receive(on: DispatchQueue.main).sink { [weak self] _ in
             self?.updateMouseCapture()
@@ -125,8 +139,8 @@ final class NotchWindowController {
     private func hoverTriggerRect() -> NSRect {
         guard let screen else { return .zero }
         if model.mode == .expanded { return shapeRect().insetBy(dx: -4, dy: -4) }
-        let width = max(model.notchSize.width, model.isDropDown ? model.notchSize.width : model.shapeSize.width) + 16
-        let height = model.notchSize.height + 6
+        let width = max(model.notchSize.width, model.isDropDown ? model.notchSize.width : model.shapeSize.width) + 24
+        let height = model.notchSize.height + 10
         return NSRect(x: screen.frame.midX - width / 2, y: screen.frame.maxY - height, width: width, height: height)
     }
 

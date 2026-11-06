@@ -90,7 +90,7 @@ final class AppSettings: ObservableObject {
         func i(_ k: String, _ def: Int) -> Int { d.object(forKey: k) as? Int ?? def }
         func s(_ k: String, _ def: String) -> String { d.string(forKey: k) ?? def }
 
-        haptics = b("haptics", true)
+        haptics = b("haptics", false)
         hoverDelay = HoverDelay(rawValue: s("hoverDelay", "short")) ?? .short
         expandOnClick = b("expandOnClick", false)
         islandWidth = IslandWidth(rawValue: s("islandWidth", "regular")) ?? .regular

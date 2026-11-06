@@ -35,6 +35,8 @@ final class LogitechHeadsetService: ObservableObject {
     private var poll: Timer?
     private var ready = false        // ignore the first reading after launch
     private var warned: Set<Int> = []
+    private var badReadings = 0
+    private var recent: [Int] = []
 
     func setEnabled(_ on: Bool) {
         stop()
@@ -158,7 +160,18 @@ final class LogitechHeadsetService: ObservableObject {
         guard let idx = featureIndex, r[2] == idx, r[3] & 0xF0 == 0x00 else { return }
         let voltage = Int(r[4]) << 8 | Int(r[5])
         let flags = r[6]
-        update(online: voltage > 0 && [0x01, 0x03, 0x07].contains(flags), voltage: voltage, flags: flags)
+        guard (3000...4500).contains(voltage), [0x01, 0x03, 0x07].contains(flags) else {
+            // The receiver sometimes returns a garbled reading; only treat it as
+            // "switched off" if it keeps happening.
+            badReadings += 1
+            if badReadings >= 3 { update(online: false, voltage: 0, flags: 0) }
+            return
+        }
+        badReadings = 0
+        // Voltage wobbles with volume / lights; average the last few readings.
+        recent.append(voltage)
+        if recent.count > 5 { recent.removeFirst() }
+        update(online: true, voltage: recent.reduce(0, +) / recent.count, flags: flags)
     }
 
     private func update(online: Bool, voltage: Int, flags: UInt8) {
@@ -172,6 +185,7 @@ final class LogitechHeadsetService: ObservableObject {
         headset = h
         DebugLog.write("headset: \(h.name) online=\(h.online) battery=\(h.percent.map { "\($0)%" } ?? "-") charging=\(h.charging)")
 
+        if !online { recent = [] }
         if wasOnline != online {
             if online { warned = [] }
             if ready { onConnectionChange?(h) }
@@ -185,24 +199,22 @@ final class LogitechHeadsetService: ObservableObject {
         if h.charging { warned = [] }
     }
 
-    /// Voltage → percent curve for these headsets (from the Linux kernel's
-    /// hid-logitech-hidpp driver, which adapted it from HeadsetControl).
-    private static let curve: [Int] = [
-        4030, 4024, 4018, 4011, 4003, 3994, 3985, 3975, 3963, 3951,
-        3937, 3922, 3907, 3893, 3880, 3868, 3857, 3846, 3837, 3828,
-        3820, 3812, 3805, 3798, 3791, 3785, 3779, 3773, 3768, 3762,
-        3757, 3752, 3747, 3742, 3738, 3733, 3729, 3724, 3720, 3716,
-        3712, 3708, 3704, 3700, 3696, 3692, 3688, 3685, 3681, 3677,
-        3674, 3670, 3667, 3663, 3660, 3657, 3653, 3650, 3646, 3643,
-        3640, 3637, 3633, 3630, 3627, 3624, 3620, 3617, 3614, 3611,
-        3608, 3604, 3601, 3598, 3595, 3592, 3589, 3585, 3582, 3579,
-        3576, 3573, 3569, 3566, 3563, 3560, 3556, 3553, 3550, 3546,
-        3543, 3539, 3536, 3532, 3529, 3525, 3499, 3466, 3433, 3399,
+    /// Voltage → percent for the G733 family, matched to Logitech G HUB.
+    /// Based on HeadsetControl's G633/G733 calibration, plus one point measured
+    /// against G HUB (3726 mV = 30%). Linear between points.
+    private static let curve: [(mv: Int, pct: Int)] = [
+        (4100, 100), (3950, 80), (3850, 60), (3775, 40), (3726, 30),
+        (3650, 20), (3500, 10), (3300, 5), (3150, 0),
     ]
 
     static func percent(forMillivolts mv: Int) -> Int {
-        guard mv > 0 else { return 0 }
-        for (i, v) in curve.enumerated() where mv >= v { return curve.count - i }
+        guard let first = curve.first, let last = curve.last else { return 0 }
+        if mv >= first.mv { return 100 }
+        if mv <= last.mv { return 0 }
+        for (hi, lo) in zip(curve, curve.dropFirst()) where mv <= hi.mv && mv >= lo.mv {
+            let t = Double(mv - lo.mv) / Double(hi.mv - lo.mv)
+            return Int((Double(lo.pct) + t * Double(hi.pct - lo.pct)).rounded())
+        }
         return 0
     }
 }
