@@ -11,7 +11,7 @@ final class ScreenshotWatcher: ObservableObject {
     private var source: DispatchSourceFileSystemObject?
     private var watched: URL?
     private var pending: DispatchWorkItem?
-    private let limit = 12
+    private var limit: Int { AppSettings.shared.screenshotCount }
 
     /// The folder macOS saves screenshots to (`defaults read com.apple.screencapture location`).
     static func folder() -> URL {

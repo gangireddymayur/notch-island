@@ -290,6 +290,7 @@ struct HUDView: View {
                 .foregroundStyle(.white)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 26)
+                .wing(.left)
                 .padding(.leading, 14)
             Spacer(minLength: notchWidth)
             HStack(spacing: 8) {
@@ -302,6 +303,7 @@ struct HUDView: View {
                     .frame(width: 26, alignment: .trailing)
                     .contentTransition(.numericText(value: shown))
             }
+            .wing(.right)
             .padding(.trailing, 14)
         }
         .frame(height: height)

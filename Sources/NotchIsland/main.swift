@@ -10,11 +10,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        model.openSettings = { [weak self] in self?.openSettings() }
         controller = NotchWindowController(model: model)
         controller?.start()
         model.start()
         setUpMenuBarIcon()
         enableLaunchAtLoginOnFirstRun()
+    }
+
+    /// Opening the app again (Spotlight, Finder, Launchpad) shows Settings —
+    /// the menu bar icon can be hidden behind the notch.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openSettings()
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -69,12 +77,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Settings
 
-    @objc private func openSettings() {
+    @objc func openSettings() {
         if settingsWindow == nil {
-            let host = NSHostingController(rootView: SettingsView(settings: model.settings, calendar: model.calendar))
+            let host = NSHostingController(rootView: SettingsView(model: model))
             let w = NSWindow(contentViewController: host)
-            w.title = "Notch Island Settings"
-            w.styleMask = [.titled, .closable]
+            w.title = "Notch Island"
+            w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+            w.toolbarStyle = .unified
+            w.setContentSize(NSSize(width: 780, height: 560))
             w.isReleasedWhenClosed = false
             w.center()
             settingsWindow = w
@@ -118,6 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
         try? SMAppService.mainApp.register()
+        // First launch: show Settings so you know where everything is.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.openSettings() }
     }
 }
 

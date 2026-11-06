@@ -198,7 +198,8 @@ final class NowPlayingService: ObservableObject {
         }
 
         // If a different app just started playing, follow it (like iPhone does).
-        if parsed.contains(where: { $0.isPlaying && !wasPlaying.contains($0.id) && $0.id != pinnedId }) {
+        if AppSettings.shared.followNewPlayer,
+           parsed.contains(where: { $0.isPlaying && !wasPlaying.contains($0.id) && $0.id != pinnedId }) {
             pinnedId = nil
         }
         players = parsed

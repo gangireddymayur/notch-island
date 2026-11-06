@@ -144,7 +144,8 @@ final class NotchWindowController {
     private var swipeLocked = false
 
     private func handleScroll(_ e: NSEvent) {
-        guard model.mode == .expanded, model.page == .media, e.hasPreciseScrollingDeltas else { return }
+        guard model.settings.swipeToSwitch, model.mode == .expanded, model.page == .media,
+              e.hasPreciseScrollingDeltas else { return }
         if e.phase == .began { swipeAccum = 0; swipeLocked = false }
         guard !swipeLocked, abs(e.scrollingDeltaX) > abs(e.scrollingDeltaY) else { return }
         swipeAccum += e.scrollingDeltaX
@@ -157,23 +158,42 @@ final class NotchWindowController {
 
     // MARK: Hover
 
+    private var openWork: DispatchWorkItem?
+
+    private func open() {
+        openWork?.cancel(); openWork = nil
+        guard !model.isHovering else { return }
+        model.isHovering = true
+        model.haptic()
+    }
+
     private func mouseMoved() {
         updateMouseCapture()
         guard !model.isDraggingFile else { return }
         if hoverTriggerRect().contains(NSEvent.mouseLocation) {
             collapseWork?.cancel()
             collapseWork = nil
-            if !model.isHovering {
-                model.isHovering = true
-                model.haptic()
-            }
-        } else if model.isHovering, collapseWork == nil {
+            // With "click to open" the pointer alone never opens the island.
+            guard !model.isHovering, !model.settings.expandOnClick, openWork == nil else { return }
+            let delay = model.settings.hoverDelay.seconds
+            if delay == 0 { open(); return }
             let work = DispatchWorkItem { [weak self] in
-                self?.model.isHovering = false
-                self?.collapseWork = nil
+                guard let self else { return }
+                self.openWork = nil
+                if self.hoverTriggerRect().contains(NSEvent.mouseLocation) { self.open() }
             }
-            collapseWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: work)
+            openWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        } else {
+            openWork?.cancel(); openWork = nil
+            if model.isHovering, collapseWork == nil {
+                let work = DispatchWorkItem { [weak self] in
+                    self?.model.isHovering = false
+                    self?.collapseWork = nil
+                }
+                collapseWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: work)
+            }
         }
     }
 
@@ -183,6 +203,9 @@ final class NotchWindowController {
     private var dragChangeCount = 0
 
     private func mouseDown() {
+        if model.settings.expandOnClick, !model.isHovering, hoverTriggerRect().contains(NSEvent.mouseLocation) {
+            open()
+        }
         dragChangeCount = NSPasteboard(name: .drag).changeCount
         dragPoll?.invalidate()
         dragPoll = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in

@@ -18,8 +18,19 @@ struct ExpandedView: View {
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(model.battery.state.onAC ? .green : .white.opacity(0.8))
                     BatteryGlyph(percent: model.battery.state.percent, charging: model.battery.state.onAC)
+                    if model.settings.showGearInIsland {
+                        Button { model.openSettings() } label: {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.55))
+                                .frame(width: 22, height: 22)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Notch Island Settings")
+                    }
                 }
-                .padding(.trailing, 18)
+                .padding(.trailing, model.settings.showGearInIsland ? 10 : 18)
             }
             .frame(height: model.notchSize.height)
 
@@ -153,7 +164,7 @@ struct ShelfPage: View {
                             ShelfTile(url: url, shelf: shelf, isScreenshot: false)
                         }
                         if !shelf.items.isEmpty && !shots.isEmpty {
-                            Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 70).padding(.horizontal, 4)
+                            Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 64).padding(.horizontal, 4)
                         }
                         ForEach(shots, id: \.self) { url in
                             ShelfTile(url: url, shelf: shelf, isScreenshot: true)
@@ -197,7 +208,7 @@ struct DropZone: View {
                 }
                 .foregroundStyle(.white.opacity(targeted ? 0.9 : 0.5))
             }
-            .frame(width: compact ? 72 : nil, height: compact ? 92 : nil)
+            .frame(width: compact ? 80 : nil, height: compact ? 84 : nil)
     }
 }
 
@@ -209,7 +220,7 @@ struct ShelfTile: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            FileThumbnail(url: url, size: 52)
+            FileThumbnail(url: url, width: 96, height: 60)
                 .overlay(alignment: .bottomTrailing) {
                     if isScreenshot {
                         Image(systemName: "camera.viewfinder")
@@ -222,8 +233,8 @@ struct ShelfTile: View {
                 }
             Text(displayName)
                 .font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.8))
-                .lineLimit(2).multilineTextAlignment(.center)
-                .frame(width: 72, height: 26, alignment: .top)
+                .lineLimit(1).truncationMode(.middle)
+                .frame(width: 96)
         }
         .padding(5)
         .background(RoundedRectangle(cornerRadius: 10).fill(.white.opacity(hover ? 0.1 : 0)))
@@ -267,20 +278,26 @@ struct ShelfTile: View {
 /// Quick Look thumbnail (real picture for images / videos / PDFs).
 struct FileThumbnail: View {
     let url: URL
-    let size: CGFloat
+    let width: CGFloat
+    let height: CGFloat
     @State private var image: NSImage?
 
     var body: some View {
-        Group {
+        ZStack {
             if let image {
-                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+                // Real previews fill the whole tile.
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                    .frame(width: width, height: height)
             } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(0.06))
                 Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
+                    .frame(width: height * 0.8, height: height * 0.8)
             }
         }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .task(id: url) { image = await Thumbnails.image(for: url, size: size) }
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
+        .task(id: url) { image = await Thumbnails.image(for: url, size: max(width, height)) }
     }
 }
 

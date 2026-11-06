@@ -79,6 +79,9 @@ final class NotchViewModel: ObservableObject {
     /// Hardware notch size in points (from the screen, with a fallback).
     @Published var notchSize = CGSize(width: 185, height: 32)
 
+    /// Opens the Settings window (set by the app delegate).
+    var openSettings: () -> Void = {}
+
     @Published private(set) var activity: Activity?
     private var queue: [Activity] = []
     private var activityTask: Task<Void, Never>?
@@ -113,12 +116,14 @@ final class NotchViewModel: ObservableObject {
 
         battery.onChange = { [weak self] old, new in self?.batteryChanged(old: old, new: new) }
         timer.onFinish = { [weak self] label in
-            NSSound(named: "Glass")?.play()
+            NSSound(named: AppSettings.shared.timerSound)?.play()
             self?.show(.timerDone(label), for: 6)
         }
         calendar.onStartingSoon = { [weak self] event in self?.show(.meeting(event), for: 7) }
         bluetooth.onEvent = { [weak self] event in self?.show(.bluetooth(event), for: 4) }
-        notifications.onNotification = { [weak self] n in self?.show(.notification(n), for: 5.5) }
+        notifications.onNotification = { [weak self] n in
+            self?.show(.notification(n), for: AppSettings.shared.notificationSeconds)
+        }
         keys.onHUD = { [weak self] kind, level, muted in self?.show(.hud(kind, level: level, muted: muted), for: 1.6) }
     }
 
@@ -130,6 +135,8 @@ final class NotchViewModel: ObservableObject {
         settings.$recentScreenshots.combineLatest(settings.$shelfEnabled)
             .map { $0 && $1 }.removeDuplicates()
             .sink { [weak self] in self?.screenshots.setEnabled($0) }.store(in: &bag)
+        settings.$screenshotCount.removeDuplicates().dropFirst()
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.screenshots.rescan() } }.store(in: &bag)
         settings.$bluetoothEnabled.removeDuplicates()
             .sink { [weak self] in self?.bluetooth.setEnabled($0) }.store(in: &bag)
         settings.$notificationsEnabled.removeDuplicates()
@@ -206,7 +213,7 @@ final class NotchViewModel: ObservableObject {
     // MARK: Battery
 
     private func batteryChanged(old: BatteryState, new: BatteryState) {
-        if new.onAC && !old.onAC, settings.chargingCard { show(.charging, for: 4.5) }
+        if new.onAC && !old.onAC, settings.chargingCard { show(.charging, for: settings.chargingSeconds) }
         if !new.onAC, settings.lowBatteryAlerts {
             for level in [20, 10] where old.percent > level && new.percent <= level {
                 show(.lowBattery(new.percent), for: 6)
@@ -253,7 +260,8 @@ final class NotchViewModel: ObservableObject {
             case .shelf: 132
             case .timer: 112
             }
-            return CGSize(width: max(n.width + 320, 560), height: n.height + content)
+            let extra = settings.islandWidth.extra
+            return CGSize(width: max(n.width + extra, extra + 240), height: n.height + content)
         case .activity(let a):
             switch a.kind {
             case .hud: return CGSize(width: n.width + 2 * 110, height: n.height)

@@ -85,7 +85,8 @@ final class CalendarService: ObservableObject {
         let next = events.first { $0.end > now }
         let soon = next.flatMap { e -> CalendarEvent? in
             let until = e.start.timeIntervalSince(now)
-            return (until <= 10 * 60 && until > -2 * 60) ? e : nil
+            let lead = Double(AppSettings.shared.meetingLeadMinutes) * 60
+            return (until <= lead && until > -2 * 60) ? e : nil
         }
         if soon != soonEvent { soonEvent = soon }
 

@@ -12,6 +12,13 @@ private let islandContentTransition = AnyTransition.asymmetric(
     removal: .opacity.animation(.easeIn(duration: 0.07))
 )
 
+/// Wings animate their own content out of the notch (see WingReveal), so
+/// they only need a quick fade + tuck when leaving.
+private let wingTransition = AnyTransition.asymmetric(
+    insertion: .identity,
+    removal: .opacity.combined(with: .scale(scale: 0.7)).animation(.easeIn(duration: 0.12))
+)
+
 struct NotchRootView: View {
     @ObservedObject var model: NotchViewModel
 
@@ -49,17 +56,17 @@ struct NotchRootView: View {
             Color.clear
         case .compact(.music):
             CompactMusicView(media: model.media, notchWidth: n.width, height: n.height)
-                .transition(islandContentTransition)
+                .transition(wingTransition)
         case .compact(.timer):
             CompactTimerView(timer: model.timer, notchWidth: n.width, height: n.height)
-                .transition(islandContentTransition)
+                .transition(wingTransition)
         case .compact(.meeting):
             CompactMeetingView(calendar: model.calendar, notchWidth: n.width, height: n.height)
-                .transition(islandContentTransition)
+                .transition(wingTransition)
         case .activity(let a):
             ActivityView(model: model, activity: a)
                 .id(a.kind.isHUD ? "hud" : a.id.uuidString)
-                .transition(islandContentTransition)
+                .transition(a.kind.isHUD ? wingTransition : islandContentTransition)
         case .expanded:
             ExpandedView(model: model)
                 .transition(islandContentTransition)
