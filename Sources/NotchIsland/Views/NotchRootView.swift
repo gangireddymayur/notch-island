@@ -55,7 +55,7 @@ struct NotchRootView: View {
         case .closed:
             Color.clear
         case .compact(.music):
-            CompactMusicView(media: model.media, notchWidth: n.width, height: n.height)
+            CompactMusicView(media: model.media, shown: model.musicForWings.first, notchWidth: n.width, height: n.height)
                 .transition(wingTransition)
         case .compact(.timer):
             CompactTimerView(timer: model.timer, notchWidth: n.width, height: n.height)

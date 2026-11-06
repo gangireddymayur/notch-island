@@ -77,6 +77,16 @@ final class NotchViewModel: ObservableObject {
         }
     }
 
+    /// The app you're currently using.
+    @Published private(set) var frontmostBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+
+    /// Players worth showing beside the notch: playing, and not the app you're in.
+    var musicForWings: [NowPlaying] {
+        media.players.filter {
+            $0.isPlaying && !(settings.hideMusicInPlayingApp && $0.bundleId == frontmostBundleId)
+        }
+    }
+
     /// Hardware notch size in points (from the screen, with a fallback).
     @Published var notchSize = CGSize(width: 185, height: 32)
 
@@ -114,6 +124,13 @@ final class NotchViewModel: ObservableObject {
         Publishers.MergeMany(sources)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.recompute(); self?.objectWillChange.send() }
+            .store(in: &bag)
+
+        NSWorkspace.shared.notificationCenter
+            .publisher(for: NSWorkspace.didActivateApplicationNotification)
+            .compactMap { ($0.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier }
+            .removeDuplicates()
+            .sink { [weak self] id in self?.frontmostBundleId = id; self?.recompute() }
             .store(in: &bag)
 
         battery.onChange = { [weak self] old, new in self?.batteryChanged(old: old, new: new) }
@@ -246,7 +263,7 @@ final class NotchViewModel: ObservableObject {
         else if let a = activity { new = .activity(a) }
         else if settings.timerEnabled && timer.isActive { new = .compact(.timer) }
         else if calendar.soonEvent != nil { new = .compact(.meeting) }
-        else if settings.showMusic && media.anyPlaying { new = .compact(.music) }
+        else if settings.showMusic && !musicForWings.isEmpty { new = .compact(.music) }
         else { new = .closed }
         if new != mode { mode = new }
     }

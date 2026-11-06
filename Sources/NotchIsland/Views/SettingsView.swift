@@ -126,6 +126,8 @@ private struct SettingsDetail: View {
         case .music:
             Section {
                 Toggle("Show artwork & equalizer beside the notch while playing", isOn: $settings.showMusic)
+                Toggle("Hide them while I\u{2019}m in the app that\u{2019}s playing", isOn: $settings.hideMusicInPlayingApp)
+                    .disabled(!settings.showMusic)
                 Picker("Equalizer color", selection: $settings.accent) {
                     ForEach(AccentChoice.allCases) { c in Text(c.title).tag(c) }
                 }

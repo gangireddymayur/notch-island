@@ -5,11 +5,11 @@ import SwiftUI
 
 struct CompactMusicView: View {
     @ObservedObject var media: NowPlayingService
+    let shown: NowPlaying?
     let notchWidth: CGFloat
     let height: CGFloat
 
     var body: some View {
-        let shown = (media.current?.isPlaying == true ? media.current : nil) ?? media.players.first { $0.isPlaying }
         HStack(spacing: 0) {
             ArtworkView(image: shown?.artwork, bundleId: shown?.bundleId, size: height - 10, corner: 6, showBadge: false)
                 .wing(.left)

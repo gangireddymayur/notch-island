@@ -49,6 +49,7 @@ final class AppSettings: ObservableObject {
     @Published var accent: AccentChoice { didSet { save(accent.rawValue, "accent") } }
     @Published var followNewPlayer: Bool { didSet { save(followNewPlayer, "followNewPlayer") } }
     @Published var swipeToSwitch: Bool { didSet { save(swipeToSwitch, "swipeToSwitch") } }
+    @Published var hideMusicInPlayingApp: Bool { didSet { save(hideMusicInPlayingApp, "hideMusicInPlayingApp") } }
 
     // Battery
     @Published var chargingCard: Bool { didSet { save(chargingCard, "chargingCard") } }
@@ -106,6 +107,7 @@ final class AppSettings: ObservableObject {
         accent = AccentChoice(rawValue: s("accent", "system")) ?? .system
         followNewPlayer = b("followNewPlayer", true)
         swipeToSwitch = b("swipeToSwitch", true)
+        hideMusicInPlayingApp = b("hideMusicInPlayingApp", true)
 
         chargingCard = b("chargingCard", true)
         chargingSeconds = n("chargingSeconds", 4.5)
