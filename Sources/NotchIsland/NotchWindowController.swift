@@ -143,8 +143,11 @@ final class NotchWindowController {
     private func hoverTriggerRect() -> NSRect {
         guard let screen else { return .zero }
         if model.mode == .expanded { return shapeRect().insetBy(dx: -4, dy: -4) }
-        let width = max(model.notchSize.width, model.isDropDown ? model.notchSize.width : model.shapeSize.width) + 24
-        let height = model.notchSize.height + 10
+        // Exactly the visible black shape (wings included) — no invisible
+        // margin, so passing near the island doesn't open it.
+        let visibleWidth = model.isDropDown ? model.notchSize.width : max(model.notchSize.width, model.shapeSize.width)
+        let width = visibleWidth + (model.mode == .closed ? 6 : 0)
+        let height = model.notchSize.height + 2
         return NSRect(x: screen.frame.midX - width / 2, y: screen.frame.maxY - height, width: width, height: height)
     }
 
