@@ -87,10 +87,16 @@ struct PlayerView: View {
                 ProgressRow(info: info)
                     .padding(.top, 4)
 
-                HStack(spacing: 26) {
-                    ControlButton(symbol: "backward.fill", size: 16) { media.send(.previous) }
+                HStack(spacing: 10) {
+                    ControlButton(symbol: "backward.end.fill", size: 14) { media.send(.previous) }
+                        .help("Previous")
+                    ControlButton(symbol: "gobackward.10", size: 15) { media.send(.skipBack) }
+                        .help("Back 10 seconds")
                     ControlButton(symbol: info.isPlaying ? "pause.fill" : "play.fill", size: 22) { media.send(.toggle) }
-                    ControlButton(symbol: "forward.fill", size: 16) { media.send(.next) }
+                    ControlButton(symbol: "goforward.10", size: 15) { media.send(.skipForward) }
+                        .help("Forward 10 seconds")
+                    ControlButton(symbol: "forward.end.fill", size: 14) { media.send(.next) }
+                        .help("Next")
                 }
                 .frame(maxWidth: .infinity)
             }

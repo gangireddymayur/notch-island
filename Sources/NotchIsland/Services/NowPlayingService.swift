@@ -26,6 +26,7 @@ struct NowPlaying: Equatable, Identifiable {
 
 enum MediaCommand: Int {
     case play = 0, pause = 1, toggle = 2, next = 4, previous = 5
+    case skipForward = 100, skipBack = 101   // ±10 s (scripts only)
 }
 
 /// Runs the bundled adapter inside /usr/bin/perl and turns its JSON lines
@@ -104,15 +105,23 @@ final class NowPlayingService: ObservableObject {
     func send(_ command: MediaCommand) {
         guard let target = current else { return }
         let explicit: MediaCommand = command == .toggle ? (target.isPlaying ? .pause : .play) : command
+        let isBrowser = Self.chromiumBrowsers.contains(target.bundleId) || target.bundleId == "com.apple.Safari"
+        // macOS's "current player" doesn't reliably match where media commands
+        // land, so the media command is only used when there's nothing else
+        // it could hit by mistake.
+        let alone = players.count == 1
+        let route = Self.scriptableApps.contains(target.bundleId) ? "app script"
+            : isBrowser ? "tab script"
+            : alone ? "media command" : "open app"
+        DebugLog.write("media: \(explicit) -> \(target.bundleId) via \(route) (macOS current: \(systemActiveId ?? "none"))")
 
         if let verb = Self.scriptVerb(explicit), Self.scriptableApps.contains(target.bundleId) {
             runScript("tell application id \"\(target.bundleId)\" to \(verb)")
-        } else if target.bundleId == systemActiveId {
-            sendMediaRemote(explicit)
-        } else if let script = Self.browserScript(bundleId: target.bundleId, title: target.title, command: explicit) {
-            // macOS won't route the media command to a browser that isn't its
-            // "current" player, so talk to the page's video/audio directly.
+        } else if isBrowser, let script = Self.browserScript(bundleId: target.bundleId, title: target.title, command: explicit) {
+            // Talk to the page's video/audio directly.
             runScript(script, browser: target.bundleId)
+        } else if alone, explicit.rawValue < 100 {
+            sendMediaRemote(explicit)
         } else {
             // Can't target it safely: open the app instead.
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.bundleId) {
@@ -121,7 +130,14 @@ final class NowPlayingService: ObservableObject {
             return
         }
 
-        // Optimistic UI so the button feels instant.
+        // Optimistic UI so the buttons feel instant.
+        if explicit == .skipForward || explicit == .skipBack, let i = players.firstIndex(where: { $0.id == target.id }) {
+            let now = players[i].currentElapsed()
+            let next = now + (explicit == .skipForward ? 10 : -10)
+            players[i].elapsed = max(0, players[i].duration > 0 ? min(players[i].duration, next) : next)
+            players[i].timestamp = Date()
+            recomputeCurrent()
+        }
         if explicit == .play || explicit == .pause, let i = players.firstIndex(where: { $0.id == target.id }) {
             players[i].elapsed = players[i].currentElapsed()
             players[i].timestamp = Date()
@@ -140,6 +156,8 @@ final class NowPlayingService: ObservableObject {
         case .next: "next track"
         case .previous: "previous track"
         case .toggle: "playpause"
+        case .skipForward: "set player position to (player position + 10)"
+        case .skipBack: "set player position to (player position - 10)"
         }
     }
 
@@ -152,7 +170,8 @@ final class NowPlayingService: ObservableObject {
     private func runScript(_ source: String, browser: String? = nil) {
         scriptQueue.async { [weak self] in
             var error: NSDictionary?
-            NSAppleScript(source: source)?.executeAndReturnError(&error)
+            let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
+            if error == nil { DebugLog.write("media: script result = \(result?.stringValue ?? "(nothing)")") }
             guard let error else {
                 if browser != nil { Task { @MainActor in self?.browserNeedsScripting = nil } }
                 return
@@ -185,15 +204,27 @@ final class NowPlayingService: ObservableObject {
         case .pause: action = "pause"
         case .next: action = "next"
         case .previous: action = "previous"
+        case .skipForward: action = "fwd"
+        case .skipBack: action = "back"
         case .toggle: return nil
         }
-        let js = "(function(a){var ms=[].slice.call(document.querySelectorAll('video,audio'));if(!ms.length)return 'none';"
+        // YouTube: real next / previous video (watch pages and Shorts).
+        // Other sites: skip ±10 s. Only <video>/<audio> and YouTube's own
+        // navigation buttons are touched.
+        let js = "(function(a){var ms=[].slice.call(document.querySelectorAll('video,audio'));"
             + "var p=ms.filter(function(x){return !x.paused});var m=p[0]||ms[0];"
+            + "var yt=location.hostname.indexOf('youtube.com')>=0;var sh=yt&&location.pathname.indexOf('/shorts/')===0;"
+            + "function c(q){var b=document.querySelector(q);if(b){b.click();return true}return false}"
             + "if(a==='pause'){if(!p.length)return 'none';p.forEach(function(x){x.pause()});return 'ok'}"
-            + "if(a==='play'){m.play();return 'ok'}"
-            + "if(a==='next'){var b=document.querySelector('.ytp-next-button');if(b&&b.offsetParent){b.click();return 'ok'}"
-            + "m.currentTime=Math.min(m.duration||1e9,m.currentTime+10);return 'ok'}"
-            + "if(a==='previous'){m.currentTime=Math.max(0,m.currentTime-10);return 'ok'}return 'none'})('\(action)')"
+            + "if(a==='play'){if(!m)return 'none';m.play();return 'ok'}"
+            + "if(a==='fwd'){if(!m)return 'none';m.currentTime=Math.min(m.duration||1e9,m.currentTime+10);return 'ok'}"
+            + "if(a==='back'){if(!m)return 'none';m.currentTime=Math.max(0,m.currentTime-10);return 'ok'}"
+            + "if(a==='next'){if(sh&&(c('#navigation-button-down button')||c('button[aria-label*=\"Next\"]')))return 'ok';"
+            + "if(yt&&c('.ytp-next-button'))return 'ok';return 'none'}"
+            + "if(a==='previous'){if(sh&&(c('#navigation-button-up button')||c('button[aria-label*=\"Previous\"]')))return 'ok';"
+            + "if(yt){if(m&&m.currentTime>3){m.currentTime=0;return 'ok'}"
+            + "var pb=document.querySelector('.ytp-prev-button');if(pb&&pb.offsetParent){pb.click();return 'ok'}history.back();return 'ok'}"
+            + "return 'none'}return 'none'})('\(action)')"
         let jsAS = js.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         let titleAS = String(title.prefix(60)).replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
