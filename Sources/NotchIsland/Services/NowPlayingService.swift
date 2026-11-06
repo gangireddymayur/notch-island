@@ -109,6 +109,10 @@ final class NowPlayingService: ObservableObject {
             runScript("tell application id \"\(target.bundleId)\" to \(verb)")
         } else if target.bundleId == systemActiveId {
             sendMediaRemote(explicit)
+        } else if let script = Self.browserScript(bundleId: target.bundleId, title: target.title, command: explicit) {
+            // macOS won't route the media command to a browser that isn't its
+            // "current" player, so talk to the page's video/audio directly.
+            runScript(script, browser: target.bundleId)
         } else {
             // Can't target it safely: open the app instead.
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.bundleId) {
@@ -141,12 +145,96 @@ final class NowPlayingService: ObservableObject {
 
     private let scriptQueue = DispatchQueue(label: "notchisland.applescript")
 
-    private func runScript(_ source: String) {
-        scriptQueue.async {
+    /// Set when a browser refuses page scripting (its "Allow JavaScript from
+    /// Apple Events" option is off). Shown as a hint in Settings → Music.
+    @Published private(set) var browserNeedsScripting: String?
+
+    private func runScript(_ source: String, browser: String? = nil) {
+        scriptQueue.async { [weak self] in
             var error: NSDictionary?
             NSAppleScript(source: source)?.executeAndReturnError(&error)
-            if let error { DebugLog.write("media: AppleScript error \(error[NSAppleScript.errorNumber] ?? "?")") }
+            guard let error else {
+                if browser != nil { Task { @MainActor in self?.browserNeedsScripting = nil } }
+                return
+            }
+            let message = error[NSAppleScript.errorMessage] as? String ?? ""
+            DebugLog.write("media: AppleScript error \(error[NSAppleScript.errorNumber] ?? "?") \(message.prefix(120))")
+            guard let browser else { return }
+            Task { @MainActor in
+                self?.browserNeedsScripting = browser
+                // Fall back to bringing the browser to the front.
+                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: browser) {
+                    NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+                }
+            }
         }
+    }
+
+    static let chromiumBrowsers: Set<String> = [
+        "com.google.Chrome", "com.google.Chrome.beta", "com.microsoft.edgemac", "com.brave.Browser",
+        "com.vivaldi.Vivaldi", "company.thebrowser.Browser",
+    ]
+
+    /// AppleScript that finds the tab playing `title` (falling back to any tab
+    /// with media) and plays / pauses it, or skips (YouTube's Next button, or
+    /// ±10 s elsewhere). Only touches <video>/<audio> elements.
+    private static func browserScript(bundleId: String, title: String, command: MediaCommand) -> String? {
+        let action: String
+        switch command {
+        case .play: action = "play"
+        case .pause: action = "pause"
+        case .next: action = "next"
+        case .previous: action = "previous"
+        case .toggle: return nil
+        }
+        let js = "(function(a){var ms=[].slice.call(document.querySelectorAll('video,audio'));if(!ms.length)return 'none';"
+            + "var p=ms.filter(function(x){return !x.paused});var m=p[0]||ms[0];"
+            + "if(a==='pause'){if(!p.length)return 'none';p.forEach(function(x){x.pause()});return 'ok'}"
+            + "if(a==='play'){m.play();return 'ok'}"
+            + "if(a==='next'){var b=document.querySelector('.ytp-next-button');if(b&&b.offsetParent){b.click();return 'ok'}"
+            + "m.currentTime=Math.min(m.duration||1e9,m.currentTime+10);return 'ok'}"
+            + "if(a==='previous'){m.currentTime=Math.max(0,m.currentTime-10);return 'ok'}return 'none'})('\(action)')"
+        let jsAS = js.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let titleAS = String(title.prefix(60)).replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+
+        if chromiumBrowsers.contains(bundleId) {
+            return """
+            tell application id "\(bundleId)"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if (title of t) contains "\(titleAS)" then
+                            if (execute t javascript "\(jsAS)") is "ok" then return "ok"
+                        end if
+                    end repeat
+                end repeat
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if (execute t javascript "\(jsAS)") is "ok" then return "ok"
+                    end repeat
+                end repeat
+            end tell
+            """
+        }
+        if bundleId == "com.apple.Safari" {
+            return """
+            tell application id "com.apple.Safari"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if (name of t) contains "\(titleAS)" then
+                            if (do JavaScript "\(jsAS)" in t) is "ok" then return "ok"
+                        end if
+                    end repeat
+                end repeat
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if (do JavaScript "\(jsAS)" in t) is "ok" then return "ok"
+                    end repeat
+                end repeat
+            end tell
+            """
+        }
+        return nil
     }
 
     private func sendMediaRemote(_ command: MediaCommand) {

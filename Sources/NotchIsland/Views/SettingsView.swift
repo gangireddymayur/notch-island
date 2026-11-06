@@ -132,6 +132,16 @@ private struct SettingsDetail: View {
                     ForEach(AccentChoice.allCases) { c in Text(c.title).tag(c) }
                 }
             }
+            Section {
+                Text("Spotify and Music are controlled directly (macOS asks once). For YouTube and other sites in Chrome, Edge, Brave or Safari, turn on the browser\u{2019}s \u{201C}Allow JavaScript from Apple Events\u{201D} \u{2014} Chrome: View \u{2192} Developer; Safari: Develop menu. The island then only pauses, plays or skips the page\u{2019}s video.")
+                    .font(.callout).foregroundStyle(.secondary)
+                if let b = model.media.browserNeedsScripting {
+                    Label("\(appName(b) ?? "Your browser") needs \u{201C}Allow JavaScript from Apple Events\u{201D} for the island\u{2019}s buttons",
+                          systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Play / pause buttons")
+            }
             Section("Several apps playing") {
                 Toggle("Switch to an app when it starts playing", isOn: $settings.followNewPlayer)
                 Toggle("Two-finger swipe on the island switches player", isOn: $settings.swipeToSwitch)
