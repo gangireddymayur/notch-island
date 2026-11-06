@@ -130,7 +130,12 @@ final class NotchViewModel: ObservableObject {
             .publisher(for: NSWorkspace.didActivateApplicationNotification)
             .compactMap { ($0.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier }
             .removeDuplicates()
-            .sink { [weak self] id in self?.frontmostBundleId = id; self?.recompute() }
+            .sink { [weak self] id in self?.appSwitched(to: id) }
+            .store(in: &bag)
+        // Swiping between desktops / full-screen apps: wait for the swipe.
+        NSWorkspace.shared.notificationCenter
+            .publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
+            .sink { [weak self] _ in self?.appSwitched(to: NSWorkspace.shared.frontmostApplication?.bundleIdentifier) }
             .store(in: &bag)
 
         battery.onChange = { [weak self] old, new in self?.batteryChanged(old: old, new: new) }
@@ -174,6 +179,22 @@ final class NotchViewModel: ObservableObject {
             .removeDuplicates { $0 == $1 }
             .sink { [weak self] show, replace in self?.keys.configure(showHUD: show, replaceSystem: show && replace) }
             .store(in: &bag)
+    }
+
+    private var switchWork: DispatchWorkItem?
+
+    /// macOS doesn't run app animations while a desktop swipe is in progress,
+    /// so wings that change mid-swipe would just pop. Apply the change once
+    /// the swipe has settled, so they visibly slide out of / into the notch.
+    private func appSwitched(to id: String?) {
+        switchWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            if self.frontmostBundleId != id { self.frontmostBundleId = id }
+            self.recompute()
+        }
+        switchWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
     func haptic(_ pattern: NSHapticFeedbackManager.FeedbackPattern = .alignment) {
