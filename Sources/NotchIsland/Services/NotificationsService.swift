@@ -37,10 +37,13 @@ final class NotificationsService {
         }
         // Backup check; the real trigger is the Accessibility observer below,
         // which fires the moment Notification Center adds a banner.
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        // Look once right away: remembers what's already on screen and starts
+        // the instant-detection observer.
+        DispatchQueue.main.async { [weak self] in self?.scan() }
+        timer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.scan() }
         }
-        timer?.tolerance = 0.5
+        timer?.tolerance = 1
     }
 
     // MARK: Instant detection
@@ -56,6 +59,8 @@ final class NotificationsService {
         }
         guard AXObserverCreate(pid, callback, &obs) == .success, let obs else { return }
         let refcon = Unmanaged.passUnretained(self).toOpaque()
+        // "Layout changed" is what actually announces a new banner; events
+        // are coalesced in bannerEvent() so they stay cheap.
         for name in [kAXWindowCreatedNotification, kAXCreatedNotification, kAXLayoutChangedNotification] {
             AXObserverAddNotification(obs, app, name as CFString, refcon)
         }
@@ -77,14 +82,14 @@ final class NotificationsService {
     /// Scan right away, then again shortly after — banner text can arrive a
     /// moment after the banner itself.
     private func bannerEvent() {
+        events += 1
         guard !burstPending else { return }
         burstPending = true
         scan()
-        for delay in [0.08, 0.2] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.scan() }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.burstPending = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in self?.scan() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.burstPending = false }
     }
+    private var events = 0
 
     private func scan() {
         if !AXIsProcessTrusted() {
@@ -99,8 +104,15 @@ final class NotificationsService {
         AXUIElementSetMessagingTimeout(app, 0.3)
         ensureObserver(pid: nc.processIdentifier, app: app)
 
+        let windows = Self.elements(app, kAXWindowsAttribute)
+        // Nothing on screen: skip the (relatively costly) walk entirely.
+        guard !windows.isEmpty else {
+            if !seen.isEmpty { seen = seen.filter { Date().timeIntervalSince($0.value) < 120 } }
+            primed = true
+            return
+        }
         var banners: [AXUIElement] = []
-        for window in Self.elements(app, kAXWindowsAttribute) {
+        for window in windows {
             Self.collectBanners(window, depth: 0, into: &banners)
         }
         let parsed = banners.compactMap { el in Self.parse(el).map { (key: $0.key, note: $0.note, element: el) } }
