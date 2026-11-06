@@ -79,7 +79,8 @@ Notch Island is small enough to read in an afternoon, and it asks for as little 
 |---|---|---|
 | Island, hover, shelf drag | Pointer position (no keystrokes) | none |
 | Battery cards | IOKit power-source API | none |
-| Music & media keys | Apple's MediaRemote framework (see below) | none |
+| Music info | Apple's MediaRemote framework (see below) | none |
+| Play / pause / skip for Spotify & Music | The app's own AppleScript commands | Automation (asked once per app) |
 | Volume HUD (beside Apple's) | CoreAudio volume listener | none |
 | Replace Apple's HUD | Event tap for **only** the volume, mute & brightness keys | Accessibility |
 | Notifications | Reads the text of macOS's own banners | Accessibility |

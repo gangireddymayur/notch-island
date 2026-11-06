@@ -24,6 +24,8 @@
     <true/>
     <key>NSCalendarsFullAccessUsageDescription</key>
     <string>Notch Island shows your upcoming events and meeting alerts beside the notch. Nothing leaves your Mac.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Notch Island sends play, pause and skip to Spotify or Music when you press the buttons in the island.</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>Notch Island shows a card when earbuds, keyboards or mice connect, with their battery levels.</string>
     <key>NSHighResolutionCapable</key>

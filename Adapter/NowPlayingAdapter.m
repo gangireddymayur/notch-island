@@ -242,6 +242,9 @@ void nis_stream(void *perl, void *cv) {
 
 // Commands: 0 play, 1 pause, 2 toggle, 4 next, 5 previous.
 // NIS_CMD = command, NIS_PLAYER = bundle id of the target app (optional).
+// Note: macOS strips the target app from commands sent by non-Apple
+// processes, so a command always reaches macOS's *current* player. The app
+// only calls this when that is the player you're controlling.
 __attribute__((visibility("default")))
 void nis_command(void *perl, void *cv) {
     if (!load()) exit(2);

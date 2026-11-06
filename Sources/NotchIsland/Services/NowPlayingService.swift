@@ -90,22 +90,71 @@ final class NowPlayingService: ObservableObject {
 
     // MARK: Commands
 
+    /// Sends play / pause / next / previous to the player shown in the island.
+    ///
+    /// macOS only lets its own apps aim a media command at a *specific* app;
+    /// for everyone else it silently goes to whichever app macOS considers
+    /// "current" (that's how pausing Spotify used to start Chrome). So:
+    /// - Spotify / Apple Music: their own AppleScript commands (always exact).
+    /// - Other apps: the media command only when that app IS macOS's current
+    ///   player; otherwise we bring the app to the front instead of risking
+    ///   the wrong one.
+    /// Play/pause is always explicit — never "toggle" — so a stray command can
+    /// never start a different app.
     func send(_ command: MediaCommand) {
-        guard let dylib = dylibPath, let script = scriptPath, let target = current else { return }
-        // Optimistic UI for play/pause so the button feels instant.
-        if command == .toggle, let i = players.firstIndex(where: { $0.id == target.id }) {
+        guard let target = current else { return }
+        let explicit: MediaCommand = command == .toggle ? (target.isPlaying ? .pause : .play) : command
+
+        if let verb = Self.scriptVerb(explicit), Self.scriptableApps.contains(target.bundleId) {
+            runScript("tell application id \"\(target.bundleId)\" to \(verb)")
+        } else if target.bundleId == systemActiveId {
+            sendMediaRemote(explicit)
+        } else {
+            // Can't target it safely: open the app instead.
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.bundleId) {
+                NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            }
+            return
+        }
+
+        // Optimistic UI so the button feels instant.
+        if explicit == .play || explicit == .pause, let i = players.firstIndex(where: { $0.id == target.id }) {
             players[i].elapsed = players[i].currentElapsed()
             players[i].timestamp = Date()
-            players[i].isPlaying.toggle()
+            players[i].isPlaying = explicit == .play
             pinnedId = target.id   // keep showing the player you just controlled
             recomputeCurrent()
         }
+    }
+
+    private static let scriptableApps: Set<String> = ["com.spotify.client", "com.apple.Music"]
+
+    private static func scriptVerb(_ c: MediaCommand) -> String? {
+        switch c {
+        case .play: "play"
+        case .pause: "pause"
+        case .next: "next track"
+        case .previous: "previous track"
+        case .toggle: "playpause"
+        }
+    }
+
+    private let scriptQueue = DispatchQueue(label: "notchisland.applescript")
+
+    private func runScript(_ source: String) {
+        scriptQueue.async {
+            var error: NSDictionary?
+            NSAppleScript(source: source)?.executeAndReturnError(&error)
+            if let error { DebugLog.write("media: AppleScript error \(error[NSAppleScript.errorNumber] ?? "?")") }
+        }
+    }
+
+    private func sendMediaRemote(_ command: MediaCommand) {
+        guard let dylib = dylibPath, let script = scriptPath else { return }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         p.arguments = [script, dylib, "command"]
-        p.environment = ["PATH": "/usr/bin:/bin",
-                         "NIS_CMD": String(command.rawValue),
-                         "NIS_PLAYER": target.bundleId]
+        p.environment = ["PATH": "/usr/bin:/bin", "NIS_CMD": String(command.rawValue)]
         try? p.run()
     }
 
