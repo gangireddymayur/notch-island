@@ -153,6 +153,33 @@ final class NowPlayingService: ObservableObject {
         }
     }
 
+    /// Jump to a position (seconds) in the player shown in the island.
+    func seek(to seconds: Double) {
+        guard let target = current else { return }
+        let pos = max(0, target.duration > 0 ? min(target.duration - 0.5, seconds) : seconds)
+        pinnedId = target.id
+        holdUntil[target.id] = Date().addingTimeInterval(5)
+        DebugLog.write("media: seek -> \(target.bundleId)")
+        if Self.scriptableApps.contains(target.bundleId) {
+            runScript("tell application id \"\(target.bundleId)\" to set player position to \(String(format: "%.2f", pos))")
+        } else if let script = Self.browserScript(bundleId: target.bundleId, title: target.title, command: .play, seekTo: pos) {
+            runScript(script, browser: target.bundleId)
+        } else {
+            return  // no reliable way to seek other apps
+        }
+        if let i = players.firstIndex(where: { $0.id == target.id }) {
+            players[i].elapsed = pos
+            players[i].timestamp = Date()
+            recomputeCurrent()
+        }
+    }
+
+    /// Whether the progress bar can be dragged for this player.
+    func canSeek(_ p: NowPlaying) -> Bool {
+        p.duration > 0 && (Self.scriptableApps.contains(p.bundleId)
+            || Self.chromiumBrowsers.contains(p.bundleId) || p.bundleId == "com.apple.Safari")
+    }
+
     private static let scriptableApps: Set<String> = ["com.spotify.client", "com.apple.Music"]
 
     private static func scriptVerb(_ c: MediaCommand) -> String? {
@@ -203,8 +230,9 @@ final class NowPlayingService: ObservableObject {
     /// AppleScript that finds the tab playing `title` (falling back to any tab
     /// with media) and plays / pauses it, or skips (YouTube's Next button, or
     /// ±10 s elsewhere). Only touches <video>/<audio> elements.
-    private static func browserScript(bundleId: String, title: String, command: MediaCommand) -> String? {
-        let action: String
+    private static func browserScript(bundleId: String, title: String, command: MediaCommand,
+                                      seekTo: Double? = nil) -> String? {
+        var action: String
         switch command {
         case .play: action = "play"
         case .pause: action = "pause"
@@ -214,15 +242,18 @@ final class NowPlayingService: ObservableObject {
         case .skipBack: action = "back"
         case .toggle: return nil
         }
+        if seekTo != nil { action = "seek" }
+        let value = String(format: "%.2f", seekTo ?? 0)
         // YouTube: real next / previous video (watch pages and Shorts).
         // Other sites: skip ±10 s. Only <video>/<audio> and YouTube's own
         // navigation buttons are touched.
-        let js = "(function(a){var ms=[].slice.call(document.querySelectorAll('video,audio'));"
+        let js = "(function(a,v){var ms=[].slice.call(document.querySelectorAll('video,audio'));"
             + "var p=ms.filter(function(x){return !x.paused});var m=p[0]||ms[0];"
             + "var yt=location.hostname.indexOf('youtube.com')>=0;var sh=yt&&location.pathname.indexOf('/shorts/')===0;"
             + "function c(q){var b=document.querySelector(q);if(b){b.click();return true}return false}"
             + "if(a==='pause'){if(!p.length)return 'none';p.forEach(function(x){x.pause()});return 'ok'}"
             + "if(a==='play'){if(!m)return 'none';m.play();return 'ok'}"
+            + "if(a==='seek'){if(!m)return 'none';m.currentTime=Math.max(0,Math.min(m.duration||1e9,v));return 'ok'}"
             + "if(a==='fwd'){if(!m)return 'none';m.currentTime=Math.min(m.duration||1e9,m.currentTime+10);return 'ok'}"
             + "if(a==='back'){if(!m)return 'none';m.currentTime=Math.max(0,m.currentTime-10);return 'ok'}"
             + "if(a==='next'){if(sh&&(c('#navigation-button-down button')||c('button[aria-label*=\"Next\"]')))return 'ok';"
@@ -230,7 +261,7 @@ final class NowPlayingService: ObservableObject {
             + "if(a==='previous'){if(sh&&(c('#navigation-button-up button')||c('button[aria-label*=\"Previous\"]')))return 'ok';"
             + "if(yt){if(m&&m.currentTime>3){m.currentTime=0;return 'ok'}"
             + "var pb=document.querySelector('.ytp-prev-button');if(pb&&pb.offsetParent){pb.click();return 'ok'}history.back();return 'ok'}"
-            + "return 'none'}return 'none'})('\(action)')"
+            + "return 'none'}return 'none'})('\(action)',\(value))"
         let jsAS = js.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         let titleAS = String(title.prefix(60)).replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")

@@ -84,7 +84,7 @@ struct PlayerView: View {
                     .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(1)
 
-                ProgressRow(info: info)
+                ProgressRow(info: info, canSeek: media.canSeek(info)) { media.seek(to: $0) }
                     .padding(.top, 4)
 
                 HStack(spacing: 10) {
@@ -106,26 +106,59 @@ struct PlayerView: View {
 
 struct ProgressRow: View {
     let info: NowPlaying
+    var canSeek = false
+    var onSeek: (Double) -> Void = { _ in }
+
+    @State private var hovering = false
+    @State private var scrub: Double?   // 0…1 while dragging
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.5)) { ctx in
             let elapsed = info.currentElapsed(at: ctx.date)
-            let fraction = info.duration > 0 ? elapsed / info.duration : 0
+            let live = info.duration > 0 ? elapsed / info.duration : 0
+            let fraction = min(1, max(0, scrub ?? live))
+            let active = canSeek && (hovering || scrub != nil)
             HStack(spacing: 8) {
-                Text(format(elapsed))
+                Text(format(scrub.map { $0 * info.duration } ?? elapsed))
+                    .foregroundStyle(scrub != nil ? .white : .white.opacity(0.5))
                 GeometryReader { geo in
+                    let w = geo.size.width
                     ZStack(alignment: .leading) {
                         Capsule().fill(.white.opacity(0.18))
-                        Capsule().fill(.white.opacity(0.85))
-                            .frame(width: max(0, geo.size.width * fraction))
+                            .frame(height: active ? 7 : 4)
+                        Capsule().fill(.white.opacity(0.9))
+                            .frame(width: max(0, w * fraction), height: active ? 7 : 4)
+                        if active {
+                            Circle().fill(.white)
+                                .frame(width: 13, height: 13)
+                                .shadow(color: .black.opacity(0.4), radius: 2)
+                                .offset(x: min(max(0, w * fraction - 6.5), w - 13))
+                                .transition(.scale.combined(with: .opacity))
+                        }
                     }
+                    .frame(maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 0)
+                        .onChanged { g in
+                            guard canSeek, w > 0 else { return }
+                            scrub = min(1, max(0, g.location.x / w))
+                        }
+                        .onEnded { g in
+                            guard canSeek, w > 0 else { return }
+                            let f = min(1, max(0, g.location.x / w))
+                            onSeek(f * info.duration)
+                            // Keep the knob where you dropped it until the player catches up.
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { scrub = nil }
+                        })
                 }
-                .frame(height: 4)
+                .frame(height: 14)
+                .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
                 Text(info.duration > 0 ? format(info.duration) : "--:--")
+                    .foregroundStyle(.white.opacity(0.5))
             }
             .font(.system(size: 10, weight: .medium, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.5))
-            .animation(.linear(duration: 0.5), value: fraction)
+            .animation(scrub == nil ? .linear(duration: 0.5) : nil, value: fraction)
+            .animation(.easeOut(duration: 0.15), value: active)
         }
     }
 
