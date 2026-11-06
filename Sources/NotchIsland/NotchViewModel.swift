@@ -183,6 +183,25 @@ final class NotchViewModel: ObservableObject {
 
     private var switchWork: DispatchWorkItem?
 
+    /// macOS hides the island's window during a desktop swipe and shows it
+    /// again on the new desktop. Tuck the wings in while hidden and slide them
+    /// back out once it's visible, so a swipe never makes them just "pop".
+    private var revealHold = false
+
+    func windowHidden() {
+        guard !revealHold, case .compact = mode else { return }
+        revealHold = true
+        recompute()
+    }
+
+    func windowShown() {
+        guard revealHold else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.revealHold = false
+            self?.recompute()
+        }
+    }
+
     /// macOS doesn't run app animations while a desktop swipe is in progress,
     /// so wings that change mid-swipe would just pop. Apply the change once
     /// the swipe has settled, so they visibly slide out of / into the notch.
@@ -282,6 +301,7 @@ final class NotchViewModel: ObservableObject {
         let new: IslandMode
         if isHovering || isDraggingFile { new = .expanded }
         else if let a = activity { new = .activity(a) }
+        else if revealHold { new = .closed }
         else if settings.timerEnabled && timer.isActive { new = .compact(.timer) }
         else if calendar.soonEvent != nil { new = .compact(.meeting) }
         else if settings.showMusic && !musicForWings.isEmpty { new = .compact(.music) }

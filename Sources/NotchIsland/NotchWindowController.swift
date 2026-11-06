@@ -90,6 +90,14 @@ final class NotchWindowController {
             }
         }
         hoverPoll?.tolerance = 0.05
+        // Desktop swipes hide and re-show this window; replay the wings.
+        NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification,
+                                               object: nil, queue: .main) { [weak self] n in
+            MainActor.assumeIsolated {
+                guard let self, let p = self.panel, (n.object as? NSWindow) === p else { return }
+                if p.occlusionState.contains(.visible) { self.model.windowShown() } else { self.model.windowHidden() }
+            }
+        }
         model.$mode.receive(on: DispatchQueue.main).sink { [weak self] _ in
             self?.updateMouseCapture()
         }.store(in: &bag)
