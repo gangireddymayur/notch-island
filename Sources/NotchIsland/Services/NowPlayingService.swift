@@ -45,6 +45,7 @@ final class NowPlayingService: ObservableObject {
     private var buffer = Data()
     private var artworkIds: [String: String] = [:]
     private var artworks: [String: NSImage] = [:]
+    private var artworkTitles: [String: String] = [:]
     private var stopped = false
 
     private var dylibPath: String? { Bundle.main.path(forResource: "NowPlayingAdapter", ofType: "dylib") }
@@ -175,21 +176,25 @@ final class NowPlayingService: ObservableObject {
             n.isPlaying = p["playing"] as? Bool ?? false
             if let ts = p["timestamp"] as? Double { n.timestamp = Date(timeIntervalSince1970: ts) }
 
+            // While you pause/resume, apps briefly publish info without artwork.
+            // Keep the last picture as long as it's the same track, so the
+            // island doesn't flicker to the app icon.
+            let sameTrack = artworkTitles[bid] == n.title
             let artId = p["artworkId"] as? String ?? ""
-            if artId.isEmpty {
+            if let b64 = p["artwork"] as? String, let data = Data(base64Encoded: b64), let img = NSImage(data: data) {
+                artworks[bid] = img
+                artworkTitles[bid] = n.title
+            } else if !sameTrack {
                 artworks[bid] = nil
-            } else if let b64 = p["artwork"] as? String, let data = Data(base64Encoded: b64) {
-                artworks[bid] = NSImage(data: data)
-            } else if artId != artworkIds[bid] {
-                artworks[bid] = nil   // changed but bytes not sent (shouldn't happen)
             }
-            artworkIds[bid] = artId
+            if !artId.isEmpty { artworkIds[bid] = artId }
             n.artwork = artworks[bid]
             parsed.append(n)
         }
         for gone in Set(artworks.keys).subtracting(seen) {
             artworks[gone] = nil
             artworkIds[gone] = nil
+            artworkTitles[gone] = nil
         }
 
         // If a different app just started playing, follow it (like iPhone does).

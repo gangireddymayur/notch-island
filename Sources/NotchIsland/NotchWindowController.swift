@@ -64,8 +64,16 @@ final class NotchWindowController {
         }) {
             monitors.append(s)
         }
-        model.$mode.sink { [weak self] mode in
-            self?.panel?.ignoresMouseEvents = (mode != .expanded)
+        // Watch for files being dragged toward the notch (opens the shelf).
+        let down: (NSEvent) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated { self?.mouseDown() }
+        }
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: down) { monitors.append(g) }
+        if let l = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown, handler: { e in down(e); return e }) {
+            monitors.append(l)
+        }
+        model.$mode.receive(on: DispatchQueue.main).sink { [weak self] _ in
+            self?.updateMouseCapture()
         }.store(in: &bag)
     }
 
@@ -105,40 +113,59 @@ final class NotchWindowController {
         return CGSize(width: 190, height: max(menuBar, 24))
     }
 
-    /// The area (in screen coordinates) that should react to the pointer.
-    private func hotRect(for mode: IslandMode) -> NSRect {
+    /// The island's current outline in screen coordinates.
+    private func shapeRect() -> NSRect {
         guard let screen else { return .zero }
-        let size = mode == .expanded ? model.shapeSize : CGSize(width: max(model.shapeSize.width, model.notchSize.width) + 16,
-                                                                 height: model.notchSize.height + 6)
-        return NSRect(x: screen.frame.midX - size.width / 2,
-                      y: screen.frame.maxY - size.height,
+        let size = model.shapeSize
+        return NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
                       width: size.width, height: size.height)
     }
+
+    /// Where the pointer opens the island: the notch strip (plus any wings).
+    private func hoverTriggerRect() -> NSRect {
+        guard let screen else { return .zero }
+        if model.mode == .expanded { return shapeRect().insetBy(dx: -4, dy: -4) }
+        let width = max(model.notchSize.width, model.isDropDown ? model.notchSize.width : model.shapeSize.width) + 16
+        let height = model.notchSize.height + 6
+        return NSRect(x: screen.frame.midX - width / 2, y: screen.frame.maxY - height, width: width, height: height)
+    }
+
+    /// The panel only takes clicks inside the island; everywhere else they
+    /// pass straight through to the apps underneath.
+    private func updateMouseCapture() {
+        let inside = shapeRect().insetBy(dx: -2, dy: -2).contains(NSEvent.mouseLocation)
+        let capture = model.mode != .closed && (inside || model.isDraggingFile)
+        if panel?.ignoresMouseEvents == capture { panel?.ignoresMouseEvents = !capture }
+    }
+
+    // MARK: Swipe between players
 
     private var swipeAccum: CGFloat = 0
     private var swipeLocked = false
 
     private func handleScroll(_ e: NSEvent) {
-        guard model.mode == .expanded, e.hasPreciseScrollingDeltas else { return }
+        guard model.mode == .expanded, model.page == .media, e.hasPreciseScrollingDeltas else { return }
         if e.phase == .began { swipeAccum = 0; swipeLocked = false }
         guard !swipeLocked, abs(e.scrollingDeltaX) > abs(e.scrollingDeltaY) else { return }
         swipeAccum += e.scrollingDeltaX
         if abs(swipeAccum) > 50 {
             swipeLocked = true   // one switch per gesture
             model.media.selectNext(offset: swipeAccum < 0 ? 1 : -1)
-            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            model.haptic()
         }
     }
 
+    // MARK: Hover
+
     private func mouseMoved() {
-        let p = NSEvent.mouseLocation
-        let inside = hotRect(for: model.mode).insetBy(dx: -4, dy: -4).contains(p)
-        if inside {
+        updateMouseCapture()
+        guard !model.isDraggingFile else { return }
+        if hoverTriggerRect().contains(NSEvent.mouseLocation) {
             collapseWork?.cancel()
             collapseWork = nil
             if !model.isHovering {
                 model.isHovering = true
-                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                model.haptic()
             }
         } else if model.isHovering, collapseWork == nil {
             let work = DispatchWorkItem { [weak self] in
@@ -147,6 +174,48 @@ final class NotchWindowController {
             }
             collapseWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: work)
+        }
+    }
+
+    // MARK: File drag → shelf
+
+    private var dragPoll: Timer?
+    private var dragChangeCount = 0
+
+    private func mouseDown() {
+        dragChangeCount = NSPasteboard(name: .drag).changeCount
+        dragPoll?.invalidate()
+        dragPoll = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pollDrag() }
+        }
+    }
+
+    private func pollDrag() {
+        let buttonDown = NSEvent.pressedMouseButtons & 1 != 0
+        if !buttonDown {
+            dragPoll?.invalidate(); dragPoll = nil
+            if model.isDraggingFile {
+                // Give the drop a moment to land before closing.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    self?.model.isDraggingFile = false
+                    self?.updateMouseCapture()
+                }
+            }
+            return
+        }
+        guard model.settings.shelfEnabled, let screen else { return }
+        let pb = NSPasteboard(name: .drag)
+        guard pb.changeCount != dragChangeCount, pb.types?.contains(.fileURL) == true else { return }
+
+        let p = NSEvent.mouseLocation
+        let near = NSRect(x: screen.frame.midX - 200, y: screen.frame.maxY - model.notchSize.height - 40,
+                          width: 400, height: model.notchSize.height + 40)
+        if !model.isDraggingFile, near.contains(p) {
+            model.isDraggingFile = true
+            model.haptic()
+            panel?.ignoresMouseEvents = false
+        } else if model.isDraggingFile, !shapeRect().insetBy(dx: -60, dy: -60).contains(p) {
+            model.isDraggingFile = false
         }
     }
 }

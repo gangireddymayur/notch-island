@@ -15,8 +15,8 @@ struct BatteryState: Equatable {
 @MainActor
 final class BatteryService: ObservableObject {
     @Published private(set) var state = BatteryState()
-    /// Called on the main actor when the power adapter is connected.
-    var onPluggedIn: (() -> Void)?
+    /// Called on the main actor with the previous and new state.
+    var onChange: ((BatteryState, BatteryState) -> Void)?
 
     private var source: CFRunLoopSource?
 
@@ -33,10 +33,11 @@ final class BatteryService: ObservableObject {
     }
 
     private func update() {
+        let old = state
         let new = Self.read()
-        let wasOnAC = state.onAC
+        guard new != old else { return }
         state = new
-        if new.onAC && !wasOnAC { onPluggedIn?() }
+        onChange?(old, new)
     }
 
     private static func read() -> BatteryState {
