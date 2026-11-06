@@ -241,9 +241,10 @@ struct BluetoothCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(event.name)
                         .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                    Text(event.connected ? "Connected" : "Disconnected")
+                    Text(event.note ?? (event.connected ? (event.charging ? "Connected \u{00B7} Charging" : "Connected")
+                                                         : "Turned off"))
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(event.connected ? .green : .white.opacity(0.5))
+                        .foregroundStyle(event.note != nil ? .orange : (event.connected ? .green : .white.opacity(0.5)))
                 }
                 Spacer(minLength: 0)
                 HStack(spacing: 10) {

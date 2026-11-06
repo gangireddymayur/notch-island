@@ -62,6 +62,7 @@ final class NotchViewModel: ObservableObject {
     let screenshots = ScreenshotWatcher()
     let calendar = CalendarService()
     let bluetooth = BluetoothService()
+    let headsets = LogitechHeadsetService()
     let keys = MediaKeysService()
     let notifications = NotificationsService()
 
@@ -107,6 +108,7 @@ final class NotchViewModel: ObservableObject {
             shelf.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             screenshots.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             calendar.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
+            headsets.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             settings.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
         ]
         Publishers.MergeMany(sources)
@@ -121,6 +123,14 @@ final class NotchViewModel: ObservableObject {
         }
         calendar.onStartingSoon = { [weak self] event in self?.show(.meeting(event), for: 7) }
         bluetooth.onEvent = { [weak self] event in self?.show(.bluetooth(event), for: 4) }
+        headsets.onConnectionChange = { [weak self] h in
+            self?.show(.bluetooth(BluetoothEvent(name: h.name, connected: h.online, symbol: "headphones",
+                                                 single: h.percent, charging: h.charging)), for: 4.5)
+        }
+        headsets.onLowBattery = { [weak self] h in
+            self?.show(.bluetooth(BluetoothEvent(name: h.name, connected: true, symbol: "headphones",
+                                                 single: h.percent, note: "Battery low \u{2014} charge soon")), for: 6)
+        }
         notifications.onNotification = { [weak self] n in
             self?.show(.notification(n), for: AppSettings.shared.notificationSeconds)
         }
@@ -137,6 +147,8 @@ final class NotchViewModel: ObservableObject {
             .sink { [weak self] in self?.screenshots.setEnabled($0) }.store(in: &bag)
         settings.$screenshotCount.removeDuplicates().dropFirst()
             .sink { [weak self] _ in DispatchQueue.main.async { self?.screenshots.rescan() } }.store(in: &bag)
+        settings.$logitechHeadset.removeDuplicates()
+            .sink { [weak self] in self?.headsets.setEnabled($0) }.store(in: &bag)
         settings.$bluetoothEnabled.removeDuplicates()
             .sink { [weak self] in self?.bluetooth.setEnabled($0) }.store(in: &bag)
         settings.$notificationsEnabled.removeDuplicates()

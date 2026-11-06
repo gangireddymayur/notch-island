@@ -14,6 +14,15 @@ struct ExpandedView: View {
                 PageTabs(model: model).padding(.leading, 14)
                 Spacer(minLength: model.notchSize.width)
                 HStack(spacing: 5) {
+                    if let h = model.headsets.headset, h.online, let p = h.percent {
+                        HStack(spacing: 3) {
+                            Image(systemName: "headphones").font(.system(size: 11, weight: .semibold))
+                            Text("\(p)%").font(.system(size: 12, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundStyle(h.charging ? .green : (p <= 20 ? .orange : .white.opacity(0.8)))
+                        .help("\(h.name) \(p)%\(h.charging ? " \u{00B7} charging" : "")")
+                        .padding(.trailing, 6)
+                    }
                     Text("\(model.battery.state.percent)%")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(model.battery.state.onAC ? .green : .white.opacity(0.8))

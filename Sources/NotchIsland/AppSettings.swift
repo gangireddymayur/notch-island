@@ -77,8 +77,9 @@ final class AppSettings: ObservableObject {
     @Published var calendarEnabled: Bool { didSet { save(calendarEnabled, "calendarEnabled") } }       // Calendars
     @Published var meetingLeadMinutes: Int { didSet { save(meetingLeadMinutes, "meetingLeadMinutes") } }
 
-    // Bluetooth
+    // Bluetooth & headsets
     @Published var bluetoothEnabled: Bool { didSet { save(bluetoothEnabled, "bluetoothEnabled") } }    // Bluetooth
+    @Published var logitechHeadset: Bool { didSet { save(logitechHeadset, "logitechHeadset") } }        // no permission
 
     static let timerSounds = ["Glass", "Ping", "Hero", "Submarine", "Funk", "Purr", "Tink"]
 
@@ -122,6 +123,7 @@ final class AppSettings: ObservableObject {
         meetingLeadMinutes = i("meetingLeadMinutes", 10)
 
         bluetoothEnabled = b("bluetoothEnabled", false)
+        logitechHeadset = b("logitechHeadset", true)
     }
 
     private func save(_ value: Any, _ key: String) {

@@ -19,7 +19,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .calendar: "Calendar"
         case .notifications: "Notifications"
         case .hud: "Volume & Brightness"
-        case .bluetooth: "Bluetooth"
+        case .bluetooth: "Headsets & Bluetooth"
         case .about: "About"
         }
     }
@@ -34,7 +34,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .calendar: "calendar"
         case .notifications: "bell.badge.fill"
         case .hud: "speaker.wave.2.fill"
-        case .bluetooth: "dot.radiowaves.left.and.right"
+        case .bluetooth: "headphones"
         case .about: "info.circle.fill"
         }
     }
@@ -264,7 +264,17 @@ private struct SettingsDetail: View {
 
         case .bluetooth:
             Section {
-                Toggle("Announce devices connecting and disconnecting", isOn: $settings.bluetoothEnabled)
+                Toggle("Logitech G headset battery", isOn: $settings.logitechHeadset)
+                headsetStatus
+            } header: {
+                Text("Logitech G (LIGHTSPEED receiver)")
+            } footer: {
+                Text("G733, G533, G633, G933, G935, G Pro X and similar. Asks the headset for its battery level directly \u{2014} no G HUB needed. macOS requires Input Monitoring for this (as it does for G HUB); Notch Island only ever talks to the Logitech headset. Shows a card when the headset is switched on or off, its battery beside the Mac\u{2019}s in the island, and a warning at 20% and 10%.")
+            }
+            Section {
+                Toggle("Announce Bluetooth devices connecting and disconnecting", isOn: $settings.bluetoothEnabled)
+            } header: {
+                Text("Bluetooth")
             } footer: {
                 Text("Earbuds, AirPods, keyboards and mice \u{2014} with left / right / case battery when the device reports it. macOS asks for Bluetooth access the first time.")
             }
@@ -307,6 +317,31 @@ private struct SettingsDetail: View {
             Button("Notification") { previewNotification() }
             Button("Bluetooth") { previewBluetooth() }
             Button("Timer done") { model.show(.timerDone("Focus"), for: 6) }
+        }
+    }
+
+    @ViewBuilder
+    private var headsetStatus: some View {
+        if !settings.logitechHeadset {
+            EmptyView()
+        } else if !model.headsets.hasPermission {
+            HStack {
+                Label("Input Monitoring needed", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Spacer()
+                Button("Open Privacy Settings") { openPrivacyPane("Privacy_ListenEvent") }
+            }
+        } else if let h = model.headsets.headset {
+            if h.online, let p = h.percent {
+                LabeledContent(h.name) {
+                    Label("\(p)%\(h.charging ? " \u{00B7} Charging" : h.full ? " \u{00B7} Full" : "")",
+                          systemImage: h.charging ? "battery.100.bolt" : "headphones")
+                        .foregroundStyle(h.charging ? .green : (p <= 20 ? .orange : .primary))
+                }
+            } else {
+                LabeledContent(h.name) { Text("Receiver connected \u{00B7} headset off").foregroundStyle(.secondary) }
+            }
+        } else {
+            Text("No Logitech receiver connected").foregroundStyle(.secondary)
         }
     }
 

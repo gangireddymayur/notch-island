@@ -10,6 +10,9 @@ struct BluetoothEvent: Equatable {
     var left: Int?
     var right: Int?
     var caseLevel: Int?
+    var charging = false
+    /// Replaces "Connected" / "Disconnected" (e.g. "Battery low").
+    var note: String?
 }
 
 /// Announces Bluetooth devices (earbuds, keyboards, mice…) connecting and

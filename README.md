@@ -26,7 +26,8 @@ all living in the notch. Built in Swift & SwiftUI. No network. No tracking. No t
 | ⏯️ **Media controls** | Previous / play-pause / next, sent to the exact app you're looking at, with a live progress bar. |
 | 🔔 **Notifications** | WhatsApp, Messages, Mail… banners appear in the island. Click to open the app. *(opt-in)* |
 | 📅 **Calendar** | Your next events with times and **Join** buttons for Zoom / Meet / Teams links; a countdown beside the notch 10 minutes before, and a card when it starts. *(opt-in)* |
-| 🎧 **Bluetooth** | Earbuds, AirPods, keyboards and mice get a connect / disconnect card — with left / right / case battery when reported. *(opt-in)* |
+| 🎧 **Logitech G headsets** | G733 / G935 / G Pro X on a LIGHTSPEED receiver: battery % beside the Mac's, a card when the headset turns on or off, low-battery warnings. Read directly over HID++ — no G HUB. |
+| 🔵 **Bluetooth** | Earbuds, AirPods, keyboards and mice get a connect / disconnect card — with left / right / case battery when reported. *(opt-in)* |
 | 🔊 **Volume & brightness HUD** | Island-style level bars. Optionally replaces Apple's on-screen HUD entirely. *(opt-in)* |
 | ⚡ **Battery** | Charging animation when you plug in, low-battery warnings at 20 % and 10 %, and a "fully charged" card. |
 | 🗂️ **File shelf** | Drag files onto the notch to park them. Drag them back out later, open them, or **AirDrop** them. |
@@ -82,6 +83,7 @@ Notch Island is small enough to read in an afternoon, and it asks for as little 
 | Notifications | Reads the text of macOS's own banners | Accessibility |
 | Calendar | EventKit, read-only | Calendars |
 | Bluetooth cards | IOBluetooth connect notifications | Bluetooth |
+| Logitech headset battery | HID++ battery query to the Logitech receiver only | Input Monitoring |
 
 - ❌ No network code at all
 - ❌ No analytics, no third-party packages
@@ -131,7 +133,7 @@ Sources/NotchIsland/
   NotchViewModel.swift      modes, pages, activity queue, sizes
   NotchWindowController     panel, hover, click-through, swipe, file drag
   NotchShape.swift          the notch outline with animatable corners
-  Services/                 NowPlaying · Battery · Calendar · Bluetooth ·
+  Services/                 NowPlaying · Battery · Calendar · Bluetooth · LogitechHeadset ·
                             MediaKeys (volume/brightness) · Notifications ·
                             Timer · Shelf
   Views/                    root, compact wings, cards, expanded pages, settings
