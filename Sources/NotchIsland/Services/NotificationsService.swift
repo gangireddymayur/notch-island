@@ -21,6 +21,8 @@ final class NotificationsService {
     private var timer: Timer?
     private var seen: [String: Date] = [:]
     private var primed = false
+    private var loggedShape = false
+    private var loggedUntrusted = false
 
     func setEnabled(_ on: Bool) {
         timer?.invalidate(); timer = nil
@@ -37,7 +39,12 @@ final class NotificationsService {
     }
 
     private func scan() {
-        guard AXIsProcessTrusted(),
+        if !AXIsProcessTrusted() {
+            if !loggedUntrusted { loggedUntrusted = true; DebugLog.write("notifications: waiting for Accessibility") }
+            return
+        }
+        loggedUntrusted = false
+        guard
               let nc = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first
         else { return }
         let app = AXUIElementCreateApplication(nc.processIdentifier)
@@ -58,7 +65,12 @@ final class NotificationsService {
         guard primed else { primed = true; return }
         // Many items at once means you opened Notification Center itself.
         guard parsed.count <= 3 else { return }
+        if !fresh.isEmpty || !banners.isEmpty && !loggedShape {
+            loggedShape = true
+            DebugLog.write("notifications: \(banners.count) banner(s) on screen, \(fresh.count) new")
+        }
         for p in fresh {
+            DebugLog.write("notifications: mirrored banner from \(p.note.appName ?? "unknown app")")
             onNotification?(p.note)
             // Don't show it twice: close Apple's banner (it stays in Notification Center).
             if AppSettings.shared.hideSystemBanners { Self.close(p.element) }
@@ -75,7 +87,8 @@ final class NotificationsService {
             $0.localizedCaseInsensitiveContains("close") && !$0.localizedCaseInsensitiveContains("clear")
         }
         if let action = actions.first(where: isClose) {
-            AXUIElementPerformAction(banner, action as CFString)
+            let r = AXUIElementPerformAction(banner, action as CFString)
+            DebugLog.write("notifications: closed macOS banner (\(r == .success ? "ok" : "error \(r.rawValue)"))")
             return
         }
         // Some versions put a close button inside the banner instead.

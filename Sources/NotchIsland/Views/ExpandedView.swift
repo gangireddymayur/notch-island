@@ -386,7 +386,8 @@ struct TimerPage: View {
 }
 
 func openPrivacyPane(_ anchor: String) {
-    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {
+    // macOS 13+ (incl. 27) uses the PrivacySecurity extension URL.
+    if let url = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?\(anchor)") {
         NSWorkspace.shared.open(url)
     }
 }
