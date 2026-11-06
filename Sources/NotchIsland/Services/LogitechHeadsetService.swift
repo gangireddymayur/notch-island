@@ -7,10 +7,8 @@ import IOKit.hid
 /// Logitech's HID++ 2.0 protocol, feature 0x1F20 "ADC measurement" — the same
 /// method the Linux kernel driver uses. Read-only: we only ever send the
 /// "what is your battery voltage?" question.
-///
-/// macOS puts the headset's HID++ channel on the same USB interface as its
-/// media buttons, so reading it needs the Input Monitoring permission (G HUB
-/// needs the same). We only ever open Logitech HID++ devices.
+/// No permission needed (the receiver isn't a keyboard). We only ever open
+/// Logitech HID++ devices.
 @MainActor
 final class LogitechHeadsetService: ObservableObject {
     struct Headset: Equatable {
@@ -22,7 +20,8 @@ final class LogitechHeadsetService: ObservableObject {
     }
 
     @Published private(set) var headset: Headset?
-    @Published private(set) var hasPermission = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+    /// Kept for the Settings UI; the headset's HID++ channel turned out not to need Input Monitoring.
+    let hasPermission = true
 
     /// Fires when the headset is switched on / off (after launch).
     var onConnectionChange: ((Headset) -> Void)?
@@ -36,28 +35,12 @@ final class LogitechHeadsetService: ObservableObject {
     private var poll: Timer?
     private var ready = false        // ignore the first reading after launch
     private var warned: Set<Int> = []
-    private var permissionPoll: Timer?
 
     func setEnabled(_ on: Bool) {
         stop()
-        permissionPoll?.invalidate(); permissionPoll = nil
         guard on else { return }
 
-        hasPermission = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
-        guard hasPermission else {
-            // Shows macOS's Input Monitoring prompt (once); start as soon as it's allowed.
-            IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-            permissionPoll = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] t in
-                MainActor.assumeIsolated {
-                    guard let self else { t.invalidate(); return }
-                    if IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted {
-                        t.invalidate()
-                        self.setEnabled(true)
-                    }
-                }
-            }
-            return
-        }
+        DebugLog.write("headset: service starting")
         let m = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
         // Logitech devices that expose the HID++ long-report collection.
         IOHIDManagerSetDeviceMatching(m, [
@@ -78,7 +61,7 @@ final class LogitechHeadsetService: ObservableObject {
         }, ctx)
         IOHIDManagerScheduleWithRunLoop(m, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
         let result = IOHIDManagerOpen(m, IOOptionBits(kIOHIDOptionsTypeNone))
-        if result != kIOReturnSuccess { NSLog("NotchIsland: HID open failed 0x%08x", result) }
+        DebugLog.write("headset: HID open \(String(format: "0x%08x", result))")
         manager = m
 
         // Battery changes slowly; this also notices the headset being switched on.
@@ -106,7 +89,7 @@ final class LogitechHeadsetService: ObservableObject {
     private func attach(_ d: IOHIDDevice) {
         device = d
         featureIndex = nil
-        NSLog("NotchIsland: Logitech receiver found")
+        DebugLog.write("headset: receiver found")
         let product = IOHIDDeviceGetProperty(d, kIOHIDProductKey as CFString) as? String ?? "Logitech Headset"
         let name = product.replacingOccurrences(of: " Gaming Headset", with: "")
         headset = Headset(name: "Logitech \(name)", online: false, percent: nil, charging: false, full: false)
@@ -153,6 +136,9 @@ final class LogitechHeadsetService: ObservableObject {
     }
 
     private func handle(_ r: [UInt8]) {
+        if featureIndex == nil {
+            DebugLog.write("headset: <- " + r.prefix(8).map { String(format: "%02X", $0) }.joined(separator: " "))
+        }
         guard r.count >= 7, r[0] == 0x11 else { return }
 
         // Error reply (e.g. headset switched off): 11 FF FF …
@@ -184,8 +170,7 @@ final class LogitechHeadsetService: ObservableObject {
         h.percent = online ? Self.percent(forMillivolts: voltage) : nil
         guard h != headset else { return }
         headset = h
-        NSLog("NotchIsland: %@ online=%d battery=%@ charging=%d", h.name, h.online ? 1 : 0,
-              h.percent.map { "\($0)%" } ?? "-", h.charging ? 1 : 0)
+        DebugLog.write("headset: \(h.name) online=\(h.online) battery=\(h.percent.map { "\($0)%" } ?? "-") charging=\(h.charging)")
 
         if wasOnline != online {
             if online { warned = [] }

@@ -83,7 +83,7 @@ Notch Island is small enough to read in an afternoon, and it asks for as little 
 | Notifications | Reads the text of macOS's own banners | Accessibility |
 | Calendar | EventKit, read-only | Calendars |
 | Bluetooth cards | IOBluetooth connect notifications | Bluetooth |
-| Logitech headset battery | HID++ battery query to the Logitech receiver only | Input Monitoring |
+| Logitech headset battery | HID++ battery query to the Logitech receiver only | none |
 
 - ❌ No network code at all
 - ❌ No analytics, no third-party packages

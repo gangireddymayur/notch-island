@@ -269,7 +269,7 @@ private struct SettingsDetail: View {
             } header: {
                 Text("Logitech G (LIGHTSPEED receiver)")
             } footer: {
-                Text("G733, G533, G633, G933, G935, G Pro X and similar. Asks the headset for its battery level directly \u{2014} no G HUB needed. macOS requires Input Monitoring for this (as it does for G HUB); Notch Island only ever talks to the Logitech headset. Shows a card when the headset is switched on or off, its battery beside the Mac\u{2019}s in the island, and a warning at 20% and 10%.")
+                Text("G733, G533, G633, G933, G935, G Pro X and similar. Asks the headset for its battery level directly \u{2014} no G HUB needed. No permission needed; Notch Island only ever talks to the Logitech headset. Shows a card when the headset is switched on or off, its battery beside the Mac\u{2019}s in the island, and a warning at 20% and 10%.")
             }
             Section {
                 Toggle("Announce Bluetooth devices connecting and disconnecting", isOn: $settings.bluetoothEnabled)
