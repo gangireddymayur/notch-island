@@ -39,6 +39,9 @@ final class NowPlayingService: ObservableObject {
 
     /// Player the user picked in the switcher; cleared when another app starts playing.
     private var pinnedId: String?
+    /// After you press a button, a player that briefly vanishes (YouTube
+    /// switching videos) is kept on screen until this time.
+    private var holdUntil: [String: Date] = [:]
     /// Player macOS considers "now playing".
     private var systemActiveId: String?
 
@@ -80,7 +83,7 @@ final class NowPlayingService: ObservableObject {
     }
 
     private func recomputeCurrent() {
-        if let pinned = pinnedId, !players.contains(where: { $0.id == pinned }) { pinnedId = nil }
+        if let pinned = pinnedId, !players.contains(where: { $0.id == pinned }), holdUntil[pinned] == nil { pinnedId = nil }
         let pick = players.first { $0.id == pinnedId }
             ?? players.first { $0.id == systemActiveId && $0.isPlaying }
             ?? players.first { $0.isPlaying }
@@ -105,6 +108,9 @@ final class NowPlayingService: ObservableObject {
     func send(_ command: MediaCommand) {
         guard let target = current else { return }
         let explicit: MediaCommand = command == .toggle ? (target.isPlaying ? .pause : .play) : command
+        // Stay on the player you're controlling, even through a brief gap.
+        pinnedId = target.id
+        holdUntil[target.id] = Date().addingTimeInterval(5)
         let isBrowser = Self.chromiumBrowsers.contains(target.bundleId) || target.bundleId == "com.apple.Safari"
         // macOS's "current player" doesn't reliably match where media commands
         // land, so the media command is only used when there's nothing else
@@ -365,8 +371,16 @@ final class NowPlayingService: ObservableObject {
             artworkTitles[gone] = nil
         }
 
-        // If a different app just started playing, follow it (like iPhone does).
-        if AppSettings.shared.followNewPlayer,
+        // Keep a player you just controlled if it vanished for a moment.
+        let now = Date()
+        holdUntil = holdUntil.filter { $0.value > now }
+        for (id, _) in holdUntil where !seen.contains(id) {
+            if let old = players.first(where: { $0.id == id }) { parsed.append(old) }
+        }
+
+        // If a different app just started playing, follow it (like iPhone does)
+        // — but not while you're in the middle of controlling another one.
+        if AppSettings.shared.followNewPlayer, holdUntil.isEmpty,
            parsed.contains(where: { $0.isPlaying && !wasPlaying.contains($0.id) && $0.id != pinnedId }) {
             pinnedId = nil
         }
