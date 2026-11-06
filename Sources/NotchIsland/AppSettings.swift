@@ -13,6 +13,7 @@ final class AppSettings: ObservableObject {
     @Published var fullChargeCard: Bool { didSet { save(fullChargeCard, "fullChargeCard") } }
     @Published var timerEnabled: Bool { didSet { save(timerEnabled, "timerEnabled") } }
     @Published var shelfEnabled: Bool { didSet { save(shelfEnabled, "shelfEnabled") } }
+    @Published var recentScreenshots: Bool { didSet { save(recentScreenshots, "recentScreenshots") } } // Desktop folder access
     @Published var haptics: Bool { didSet { save(haptics, "haptics") } }
     @Published var volumeHUD: Bool { didSet { save(volumeHUD, "volumeHUD") } }
 
@@ -31,6 +32,7 @@ final class AppSettings: ObservableObject {
         fullChargeCard = b("fullChargeCard", true)
         timerEnabled = b("timerEnabled", true)
         shelfEnabled = b("shelfEnabled", true)
+        recentScreenshots = b("recentScreenshots", true)
         haptics = b("haptics", true)
         volumeHUD = b("volumeHUD", false)
         replaceSystemHUD = b("replaceSystemHUD", false)

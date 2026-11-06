@@ -205,7 +205,15 @@ final class NotchWindowController {
         }
         guard model.settings.shelfEnabled, let screen else { return }
         let pb = NSPasteboard(name: .drag)
-        guard pb.changeCount != dragChangeCount, pb.types?.contains(.fileURL) == true else { return }
+        // Files, plus "promised" files like the floating screenshot preview.
+        let fileLike: [NSPasteboard.PasteboardType] = [
+            .fileURL, .png, .tiff,
+            NSPasteboard.PasteboardType("com.apple.NSFilePromiseItemMetaData"),
+            NSPasteboard.PasteboardType("com.apple.pasteboard.promised-file-url"),
+            NSPasteboard.PasteboardType("public.jpeg"),
+        ]
+        guard pb.changeCount != dragChangeCount,
+              let types = pb.types, types.contains(where: fileLike.contains) else { return }
 
         let p = NSEvent.mouseLocation
         let near = NSRect(x: screen.frame.midX - 200, y: screen.frame.maxY - model.notchSize.height - 40,

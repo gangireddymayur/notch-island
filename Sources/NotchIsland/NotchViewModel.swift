@@ -59,6 +59,7 @@ final class NotchViewModel: ObservableObject {
     let battery = BatteryService()
     let timer = TimerService()
     let shelf = ShelfStore()
+    let screenshots = ScreenshotWatcher()
     let calendar = CalendarService()
     let bluetooth = BluetoothService()
     let keys = MediaKeysService()
@@ -101,6 +102,7 @@ final class NotchViewModel: ObservableObject {
             battery.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             timer.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             shelf.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
+            screenshots.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             calendar.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             settings.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
         ]
@@ -125,6 +127,9 @@ final class NotchViewModel: ObservableObject {
         battery.start()
         settings.$calendarEnabled.removeDuplicates()
             .sink { [weak self] in self?.calendar.setEnabled($0) }.store(in: &bag)
+        settings.$recentScreenshots.combineLatest(settings.$shelfEnabled)
+            .map { $0 && $1 }.removeDuplicates()
+            .sink { [weak self] in self?.screenshots.setEnabled($0) }.store(in: &bag)
         settings.$bluetoothEnabled.removeDuplicates()
             .sink { [weak self] in self?.bluetooth.setEnabled($0) }.store(in: &bag)
         settings.$notificationsEnabled.removeDuplicates()
@@ -241,7 +246,14 @@ final class NotchViewModel: ObservableObject {
         case .compact:
             return CGSize(width: n.width + 2 * 70, height: n.height)
         case .expanded:
-            return CGSize(width: max(n.width + 320, 560), height: n.height + 150)
+            // Each page gets just the height it needs — no empty black space.
+            let content: CGFloat = switch page {
+            case .media: 120
+            case .calendar: 124
+            case .shelf: 132
+            case .timer: 112
+            }
+            return CGSize(width: max(n.width + 320, 560), height: n.height + content)
         case .activity(let a):
             switch a.kind {
             case .hud: return CGSize(width: n.width + 2 * 110, height: n.height)

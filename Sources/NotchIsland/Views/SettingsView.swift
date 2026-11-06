@@ -25,8 +25,12 @@ struct SettingsView: View {
                 Toggle("Show now playing beside the notch", isOn: $settings.showMusic)
                 Toggle("Timer page", isOn: $settings.timerEnabled)
                 Toggle("File shelf (drag files onto the notch)", isOn: $settings.shelfEnabled)
+                Toggle("Recent screenshots on the shelf", isOn: $settings.recentScreenshots)
+                    .disabled(!settings.shelfEnabled)
             } header: {
                 Label("Island", systemImage: "capsule.fill")
+            } footer: {
+                Text("Screenshots are read from your screenshot folder (\(ScreenshotWatcher.folder().path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))). macOS asks once for access to that folder.")
             }
 
             Section {

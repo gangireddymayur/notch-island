@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import QuickLookThumbnailing
 import UniformTypeIdentifiers
 
 struct ExpandedView: View {
@@ -26,7 +27,7 @@ struct ExpandedView: View {
                 switch model.page {
                 case .media: MediaPage(media: model.media)
                 case .calendar: CalendarPage(calendar: model.calendar)
-                case .shelf: ShelfPage(shelf: model.shelf, targeted: dropTargeted)
+                case .shelf: ShelfPage(shelf: model.shelf, screenshots: model.screenshots, targeted: dropTargeted)
                 case .timer: TimerPage(timer: model.timer)
                 }
             }
@@ -37,15 +38,10 @@ struct ExpandedView: View {
             .id(model.page)
             .transition(.opacity.animation(.easeOut(duration: 0.15)))
         }
-        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
+        .onDrop(of: ShelfStore.dropTypes, isTargeted: $dropTargeted) { providers in
             guard model.settings.shelfEnabled else { return false }
             model.page = .shelf
-            for provider in providers {
-                _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                    guard let url else { return }
-                    Task { @MainActor in model.shelf.add([url]) }
-                }
-            }
+            model.shelf.accept(providers)
             return true
         }
     }
@@ -139,57 +135,100 @@ struct EventRow: View {
 
 struct ShelfPage: View {
     @ObservedObject var shelf: ShelfStore
+    @ObservedObject var screenshots: ScreenshotWatcher
     let targeted: Bool
 
     var body: some View {
+        let shots = screenshots.recent.filter { !shelf.items.contains($0) }
         HStack(spacing: 12) {
-            if shelf.items.isEmpty {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-                    .foregroundStyle(.white.opacity(targeted ? 0.8 : 0.3))
-                    .overlay {
-                        VStack(spacing: 4) {
-                            Image(systemName: "tray.and.arrow.down.fill").font(.system(size: 22))
-                            Text("Drop files here").font(.system(size: 12, weight: .medium))
-                        }
-                        .foregroundStyle(.white.opacity(targeted ? 0.9 : 0.5))
-                    }
+            if shelf.items.isEmpty && shots.isEmpty {
+                DropZone(targeted: targeted, compact: false)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(shelf.items, id: \.self) { url in ShelfTile(url: url, shelf: shelf) }
+                    HStack(spacing: 6) {
+                        if shelf.items.isEmpty {
+                            DropZone(targeted: targeted, compact: true)
+                        }
+                        ForEach(shelf.items, id: \.self) { url in
+                            ShelfTile(url: url, shelf: shelf, isScreenshot: false)
+                        }
+                        if !shelf.items.isEmpty && !shots.isEmpty {
+                            Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 70).padding(.horizontal, 4)
+                        }
+                        ForEach(shots, id: \.self) { url in
+                            ShelfTile(url: url, shelf: shelf, isScreenshot: true)
+                        }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 2)
                 }
                 .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(targeted ? 0.12 : 0)))
-                VStack(spacing: 8) {
-                    PillButton(title: "AirDrop", prominent: true) { shelf.airDrop(shelf.items) }
-                    PillButton(title: "Clear") { shelf.clear() }
+                if !shelf.items.isEmpty {
+                    VStack(spacing: 8) {
+                        PillButton(title: "AirDrop", prominent: true) { shelf.airDrop(shelf.items) }
+                        PillButton(title: "Clear") { shelf.clear() }
+                    }
                 }
             }
         }
         .animation(.easeOut(duration: 0.15), value: targeted)
+        .animation(islandSpring, value: shelf.items)
+        .animation(islandSpring, value: screenshots.recent)
+        .onAppear {
+            shelf.prune()
+            screenshots.rescan()
+        }
+    }
+}
+
+struct DropZone: View {
+    let targeted: Bool
+    let compact: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+            .foregroundStyle(.white.opacity(targeted ? 0.8 : 0.3))
+            .overlay {
+                VStack(spacing: 4) {
+                    Image(systemName: "tray.and.arrow.down.fill").font(.system(size: compact ? 16 : 22))
+                    Text(compact ? "Drop\nfiles" : "Drop files here")
+                        .font(.system(size: compact ? 10 : 12, weight: .medium))
+                        .multilineTextAlignment(.center)
+                }
+                .foregroundStyle(.white.opacity(targeted ? 0.9 : 0.5))
+            }
+            .frame(width: compact ? 72 : nil, height: compact ? 92 : nil)
     }
 }
 
 struct ShelfTile: View {
     let url: URL
     @ObservedObject var shelf: ShelfStore
+    let isScreenshot: Bool
     @State private var hover = false
 
     var body: some View {
         VStack(spacing: 4) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
-                .resizable().frame(width: 44, height: 44)
-            Text(url.lastPathComponent)
+            FileThumbnail(url: url, size: 52)
+                .overlay(alignment: .bottomTrailing) {
+                    if isScreenshot {
+                        Image(systemName: "camera.viewfinder")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(3)
+                            .background(Circle().fill(.black.opacity(0.7)))
+                            .offset(x: 4, y: 4)
+                    }
+                }
+            Text(displayName)
                 .font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.8))
                 .lineLimit(2).multilineTextAlignment(.center)
-                .frame(width: 72)
+                .frame(width: 72, height: 26, alignment: .top)
         }
-        .padding(6)
+        .padding(5)
         .background(RoundedRectangle(cornerRadius: 10).fill(.white.opacity(hover ? 0.1 : 0)))
         .overlay(alignment: .topTrailing) {
-            if hover {
+            if hover && !isScreenshot {
                 Button { shelf.remove(url) } label: {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 14))
                         .foregroundStyle(.white, .black.opacity(0.6))
@@ -197,17 +236,67 @@ struct ShelfTile: View {
                 .buttonStyle(.plain)
             }
         }
+        .contentShape(Rectangle())
         .onHover { hover = $0 }
         .onTapGesture(count: 2) { shelf.open(url) }
         .onDrag { NSItemProvider(contentsOf: url) ?? NSItemProvider() }
         .contextMenu {
             Button("Open") { shelf.open(url) }
             Button("Show in Finder") { shelf.reveal(url) }
+            Button("Copy") { shelf.copy(url) }
             Button("AirDrop") { shelf.airDrop([url]) }
             Divider()
-            Button("Remove from Shelf") { shelf.remove(url) }
+            if isScreenshot {
+                Button("Keep on Shelf") { shelf.add([url]) }
+                Button("Move to Trash") { NSWorkspace.shared.recycle([url]) }
+            } else {
+                Button("Remove from Shelf") { shelf.remove(url) }
+            }
         }
         .help(url.path)
+    }
+
+    /// "Screenshot 2026-11-06 at 22.41.07" → "22:41:07" style short names.
+    private var displayName: String {
+        let name = url.deletingPathExtension().lastPathComponent
+        guard isScreenshot, let at = name.range(of: " at ") else { return url.lastPathComponent }
+        return name[at.upperBound...].replacingOccurrences(of: ".", with: ":")
+    }
+}
+
+/// Quick Look thumbnail (real picture for images / videos / PDFs).
+struct FileThumbnail: View {
+    let url: URL
+    let size: CGFloat
+    @State private var image: NSImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+            } else {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .task(id: url) { image = await Thumbnails.image(for: url, size: size) }
+    }
+}
+
+@MainActor
+enum Thumbnails {
+    private static var cache: [URL: NSImage] = [:]
+
+    static func image(for url: URL, size: CGFloat) async -> NSImage? {
+        if let hit = cache[url] { return hit }
+        let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: size, height: size),
+                                                   scale: 2, representationTypes: .thumbnail)
+        guard let rep = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) else { return nil }
+        let img = rep.nsImage
+        if cache.count > 200 { cache.removeAll() }
+        cache[url] = img
+        return img
     }
 }
 
