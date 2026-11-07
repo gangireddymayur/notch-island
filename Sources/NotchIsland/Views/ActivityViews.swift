@@ -27,6 +27,8 @@ struct ActivityView: View {
                           onDone: { model.dismissActivity() })
         case .meeting(let e):
             MeetingCard(event: e, notchHeight: n.height) { model.dismissActivity() }
+        case .headsetCharging(let h):
+            HeadsetChargingCard(headset: h, notchHeight: n.height)
         }
     }
 }
@@ -174,6 +176,94 @@ struct BatteryAlertCard: View {
             }
         }
         .onAppear { withAnimation(.easeOut(duration: 1).delay(0.2)) { fill = CGFloat(percent) / 100 } }
+    }
+}
+
+/// Logitech headset plugged in to charge (or just finished charging).
+struct HeadsetChargingCard: View {
+    let headset: LogitechHeadsetService.Headset
+    let notchHeight: CGFloat
+
+    @State private var fill: CGFloat = 0
+    @State private var shown = 0
+    @State private var appeared = false
+    @State private var bounce = 0
+
+    private var target: Int { headset.full ? 100 : (headset.percent ?? 0) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.green)
+                    .symbolEffect(.pulse, options: .repeating)
+                    .padding(.leading, 18)
+                Spacer()
+                Image(systemName: "headphones")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.trailing, 18)
+            }
+            .frame(height: notchHeight)
+
+            HStack(spacing: 16) {
+                ZStack(alignment: .bottomTrailing) {
+                    Image(systemName: "headphones")
+                        .font(.system(size: 34, weight: .regular))
+                        .foregroundStyle(.white)
+                        .symbolEffect(.bounce, value: bounce)
+                    Image(systemName: "bolt.circle.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.black, .green)
+                        .offset(x: 6, y: 4)
+                }
+                .frame(width: 52)
+                .scaleEffect(appeared ? 1 : 0.6)
+                .opacity(appeared ? 1 : 0)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text(headset.full ? "Fully Charged" : "Charging")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                        Text(headset.name)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .lineLimit(1)
+                    }
+                    BigBattery(fill: fill, color: .green, showBolt: false)
+                        .frame(width: 150, height: 22)
+                }
+                .offset(y: appeared ? 0 : 8)
+                .opacity(appeared ? 1 : 0)
+
+                Spacer(minLength: 0)
+
+                Text("\(shown)%")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundStyle(.green)
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(shown)))
+                    .opacity(appeared ? 1 : 0)
+            }
+            .padding(.horizontal, 22)
+            .frame(maxHeight: .infinity)
+            .padding(.bottom, 6)
+        }
+        .onAppear {
+            shown = max(target - 20, 0)
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.75).delay(0.1)) { appeared = true }
+            withAnimation(.easeOut(duration: 1.2).delay(0.2)) { fill = CGFloat(target) / 100 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { bounce += 1 }
+            let steps = target - shown
+            guard steps > 0 else { return }
+            for i in 1...steps {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 + 1.0 * Double(i) / Double(steps)) {
+                    withAnimation(.snappy(duration: 0.18)) { shown = min(shown + 1, target) }
+                }
+            }
+        }
     }
 }
 

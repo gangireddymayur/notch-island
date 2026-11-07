@@ -33,6 +33,7 @@ enum ActivityKind: Equatable {
     case hud(HUDKind, level: Float, muted: Bool)
     case timerDone(String)
     case meeting(CalendarEvent)
+    case headsetCharging(LogitechHeadsetService.Headset)
 
     var isHUD: Bool { if case .hud = self { return true } else { return false } }
 }
@@ -148,6 +149,10 @@ final class NotchViewModel: ObservableObject {
         headsets.onConnectionChange = { [weak self] h in
             self?.show(.bluetooth(BluetoothEvent(name: h.name, connected: h.online, symbol: "headphones",
                                                  single: h.percent, charging: h.charging)), for: 4.5)
+        }
+        headsets.onCharging = { [weak self] h in
+            guard let self, self.settings.headsetChargingCard else { return }
+            self.show(.headsetCharging(h), for: self.settings.chargingSeconds)
         }
         headsets.onLowBattery = { [weak self] h in
             self?.show(.bluetooth(BluetoothEvent(name: h.name, connected: true, symbol: "headphones",

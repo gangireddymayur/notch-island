@@ -25,6 +25,9 @@ final class LogitechHeadsetService: ObservableObject {
 
     /// Fires when the headset is switched on / off (after launch).
     var onConnectionChange: ((Headset) -> Void)?
+    /// Fires when the headset starts charging, and when it becomes full.
+    var onCharging: ((Headset) -> Void)?
+    private var chargeWork: DispatchWorkItem?
     /// Fires once at each low-battery level chosen in Settings.
     var onLowBattery: ((Headset) -> Void)?
 
@@ -209,6 +212,7 @@ final class LogitechHeadsetService: ObservableObject {
 
     private func update(online: Bool, voltage: Int, flags: UInt8) {
         guard var h = headset else { return }
+        let old = h
         let wasOnline = h.online
         h.online = online
         h.charging = flags == 0x03
@@ -231,6 +235,25 @@ final class LogitechHeadsetService: ObservableObject {
             }
         }
         if h.charging { warned = [] }
+
+        // Charging card: only for a headset that was already on (switching it
+        // on while plugged in already shows the "Connected · Charging" card).
+        if ready, wasOnline, online, announced == true {
+            if h.charging && !old.charging {
+                chargeWork?.cancel()
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self, let now = self.headset, now.online, now.charging else { return }
+                    DebugLog.write("headset: charging started")
+                    self.onCharging?(now)
+                }
+                chargeWork = work
+                // The charger flag can flicker as the cable seats; confirm first.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+            } else if h.full && !old.full {
+                DebugLog.write("headset: fully charged")
+                onCharging?(h)
+            }
+        }
     }
 
     /// Voltage → percent for the G733 family, matched to Logitech G HUB.

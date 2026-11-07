@@ -167,6 +167,8 @@ private struct SettingsDetail: View {
             }
             Section("Logitech headset") {
                 Toggle("Show Logitech G headset battery", isOn: $settings.logitechHeadset)
+                Toggle("Charging animation when the headset is plugged in", isOn: $settings.headsetChargingCard)
+                    .disabled(!settings.logitechHeadset)
                 headsetStatus
                 alertPicker("First warning at", $settings.headsetAlert1).disabled(!settings.logitechHeadset)
                 alertPicker("Second warning at", $settings.headsetAlert2).disabled(!settings.logitechHeadset)
@@ -176,6 +178,11 @@ private struct SettingsDetail: View {
                     Button("Charging") { model.show(.charging, for: settings.chargingSeconds) }
                     Button("Low battery") { model.show(.lowBattery(19), for: 5) }
                     Button("Fully charged") { model.show(.fullyCharged, for: 5) }
+                    Button("Headset charging") {
+                        model.show(.headsetCharging(model.headsets.headset ?? LogitechHeadsetService.Headset(
+                            name: "Logitech G733", online: true, percent: 36, charging: true, full: false)),
+                            for: settings.chargingSeconds)
+                    }
                 }
             }
 

@@ -99,6 +99,7 @@ final class AppSettings: ObservableObject {
     // Bluetooth & headsets
     @Published var bluetoothEnabled: Bool { didSet { save(bluetoothEnabled, "bluetoothEnabled") } }    // Bluetooth
     @Published var logitechHeadset: Bool { didSet { save(logitechHeadset, "logitechHeadset") } }        // no permission
+    @Published var headsetChargingCard: Bool { didSet { save(headsetChargingCard, "headsetChargingCard") } }
 
     static let alertLevels = [50, 40, 30, 25, 20, 15, 10, 5]
     static let timerSounds = ["Glass", "Ping", "Hero", "Submarine", "Funk", "Purr", "Tink"]
@@ -151,6 +152,7 @@ final class AppSettings: ObservableObject {
 
         bluetoothEnabled = b("bluetoothEnabled", false)
         logitechHeadset = b("logitechHeadset", true)
+        headsetChargingCard = b("headsetChargingCard", true)
     }
 
     private func save(_ value: Any, _ key: String) {
