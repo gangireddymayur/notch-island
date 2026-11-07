@@ -17,9 +17,19 @@ final class LogitechHeadsetService: ObservableObject {
         var percent: Int?
         var charging: Bool
         var full: Bool
+        /// From G HUB (when running): estimated hours of use left.
+        var hoursLeft: Double? = nil
+        /// Whether the level came from G HUB (accurate) or our voltage reading.
+        var fromGHub = false
     }
 
     @Published private(set) var headset: Headset?
+    /// Optional G HUB reading (local only) — accurate, especially while charging.
+    let ghub = GHubClient()
+    private var lastInput: (online: Bool, voltage: Int, flags: UInt8)?
+    /// Right after unplugging, the voltage stays raised for a while; don't
+    /// trust it (or remember it) until this time.
+    private var settleUntil: Date?
     /// Kept for the Settings UI; the headset's HID++ channel turned out not to need Input Monitoring.
     let hasPermission = true
 
@@ -223,7 +233,16 @@ final class LogitechHeadsetService: ObservableObject {
         else { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.query() } }
     }
 
+    func setUseGHub(_ on: Bool) {
+        ghub.onChange = { [weak self] in
+            guard let self, let i = self.lastInput else { return }
+            self.update(online: i.online, voltage: i.voltage, flags: i.flags)
+        }
+        ghub.setEnabled(on)
+    }
+
     private func update(online: Bool, voltage: Int, flags: UInt8) {
+        lastInput = (online, voltage, flags)
         guard var h = headset else { return }
         let old = h
         let wasOnline = h.online
@@ -236,10 +255,28 @@ final class LogitechHeadsetService: ObservableObject {
             h.percent = 100
         } else if h.charging {
             h.percent = lastDischargePercent      // nil if we never saw it on battery
+        } else if let until = settleUntil, Date() < until {
+            h.percent = nil   // still settling after unplugging
         } else {
+            settleUntil = nil
             let p = Self.percent(forMillivolts: voltage)
             h.percent = p
             lastDischargePercent = p
+        }
+        if old.charging && !h.charging && online && flags == 0x01 {
+            settleUntil = Date().addingTimeInterval(600)
+            h.percent = nil
+        }
+        // G HUB's own estimate wins when available (exact, live while charging).
+        h.hoursLeft = nil
+        h.fromGHub = false
+        if online, let g = ghub.current {
+            h.percent = Int(g.percent.rounded())
+            h.charging = g.charging && !g.full
+            h.full = g.full
+            h.hoursLeft = g.charging ? nil : g.hoursLeft
+            h.fromGHub = true
+            if !g.charging { lastDischargePercent = h.percent }
         }
         guard h != headset else { return }
         headset = h

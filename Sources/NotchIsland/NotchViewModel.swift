@@ -176,6 +176,9 @@ final class NotchViewModel: ObservableObject {
             .sink { [weak self] _ in DispatchQueue.main.async { self?.screenshots.rescan() } }.store(in: &bag)
         settings.$logitechHeadset.removeDuplicates()
             .sink { [weak self] in self?.headsets.setEnabled($0) }.store(in: &bag)
+        settings.$logitechHeadset.combineLatest(settings.$useGHubBattery)
+            .map { $0 && $1 }.removeDuplicates()
+            .sink { [weak self] in self?.headsets.setUseGHub($0) }.store(in: &bag)
         settings.$bluetoothEnabled.removeDuplicates()
             .sink { [weak self] in self?.bluetooth.setEnabled($0) }.store(in: &bag)
         // Island notifications can follow the charger or Low Power Mode.

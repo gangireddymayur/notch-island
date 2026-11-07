@@ -7,7 +7,7 @@
 **A Dynamic Island for your MacBook's notch — native, tiny, private.**
 
 Music from every app, notifications, calendar, AirPods & Bluetooth, volume and brightness, a file shelf and a focus timer —
-all living in the notch. Built in Swift & SwiftUI. No network. No tracking. No third-party code.
+all living in the notch. Built in Swift & SwiftUI. No internet. No tracking. No third-party code.
 
 ![macOS](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
@@ -86,9 +86,9 @@ Notch Island is small enough to read in an afternoon, and it asks for as little 
 | Notifications | Reads the text of macOS's own banners | Accessibility |
 | Calendar | EventKit, read-only | Calendars |
 | Bluetooth cards | IOBluetooth connect notifications | Bluetooth |
-| Logitech headset battery | HID++ battery query to the Logitech receiver only | none |
+| Logitech headset battery | HID++ battery query to the Logitech receiver; optionally G HUB's estimate via its local-only socket (127.0.0.1) | none |
 
-- ❌ No network code at all
+- ❌ No internet access. The only connection is optional and local: to Logitech G HUB on `127.0.0.1` (your own Mac) for accurate headset battery
 - ❌ No analytics, no third-party packages
 - ✅ Every permission-based feature is **off by default**
 

@@ -169,6 +169,9 @@ private struct SettingsDetail: View {
                 Toggle("Show Logitech G headset battery", isOn: $settings.logitechHeadset)
                 Toggle("Charging animation when the headset is plugged in", isOn: $settings.headsetChargingCard)
                     .disabled(!settings.logitechHeadset)
+                Toggle("Use G HUB\u{2019}s battery reading when G HUB is running", isOn: $settings.useGHubBattery)
+                    .disabled(!settings.logitechHeadset)
+                    .help("Connects only to G HUB on this Mac (127.0.0.1). More accurate, especially while charging.")
                 headsetStatus
                 alertPicker("First warning at", $settings.headsetAlert1).disabled(!settings.logitechHeadset)
                 alertPicker("Second warning at", $settings.headsetAlert2).disabled(!settings.logitechHeadset)
@@ -358,6 +361,14 @@ private struct SettingsDetail: View {
         }
     }
 
+    private func headsetLine(_ h: LogitechHeadsetService.Headset, _ p: Int) -> String {
+        var parts = ["\(p)%"]
+        if h.charging { parts.append("Charging") } else if h.full { parts.append("Full") }
+        if let hours = h.hoursLeft { parts.append("\u{2248} \(Int(hours.rounded())) h left") }
+        if h.fromGHub { parts.append("via G HUB") }
+        return parts.joined(separator: " \u{00B7} ")
+    }
+
     @ViewBuilder
     private var headsetStatus: some View {
         if !settings.logitechHeadset {
@@ -373,8 +384,7 @@ private struct SettingsDetail: View {
                 LabeledContent(h.name) { Label("Charging", systemImage: "battery.100.bolt").foregroundStyle(.green) }
             } else if h.online, let p = h.percent {
                 LabeledContent(h.name) {
-                    Label("\(p)%\(h.charging ? " \u{00B7} Charging" : h.full ? " \u{00B7} Full" : "")",
-                          systemImage: h.charging ? "battery.100.bolt" : "headphones")
+                    Label(headsetLine(h, p), systemImage: h.charging ? "battery.100.bolt" : "headphones")
                         .foregroundStyle(h.charging ? .green : (p <= 20 ? .orange : .primary))
                 }
             } else {
