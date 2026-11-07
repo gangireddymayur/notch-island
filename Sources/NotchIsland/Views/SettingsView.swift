@@ -257,6 +257,10 @@ private struct SettingsDetail: View {
                 Toggle("Show notifications in the island", isOn: $settings.notificationsEnabled)
                 Toggle("Close the macOS banner when it\u{2019}s shown in the island", isOn: $settings.hideSystemBanners)
                     .disabled(!settings.notificationsEnabled)
+                Picker("When to show in the island", selection: $settings.notificationPower) {
+                    ForEach(NotificationPower.allCases) { Text($0.title).tag($0) }
+                }
+                .disabled(!settings.notificationsEnabled)
                 LabeledContent("Show for \(settings.notificationSeconds, specifier: "%.1f") s") {
                     Slider(value: $settings.notificationSeconds, in: 3...12, step: 0.5).frame(width: 220)
                 }

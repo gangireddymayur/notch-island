@@ -15,6 +15,18 @@ enum IslandWidth: String, CaseIterable, Identifiable {
     var title: String { rawValue.capitalized }
 }
 
+enum NotificationPower: String, CaseIterable, Identifiable {
+    case always, chargingOnly, pauseLowPower
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .always: "Always"
+        case .chargingOnly: "Only while charging"
+        case .pauseLowPower: "Pause in Low Power Mode"
+        }
+    }
+}
+
 enum AccentChoice: String, CaseIterable, Identifiable {
     case system, white, green, pink, orange, purple
     var id: String { rawValue }
@@ -78,6 +90,7 @@ final class AppSettings: ObservableObject {
     @Published var notificationsEnabled: Bool { didSet { save(notificationsEnabled, "notificationsEnabled") } } // Accessibility
     @Published var notificationSeconds: Double { didSet { save(notificationSeconds, "notificationSeconds") } }
     @Published var hideSystemBanners: Bool { didSet { save(hideSystemBanners, "hideSystemBanners") } }
+    @Published var notificationPower: NotificationPower { didSet { save(notificationPower.rawValue, "notificationPower") } }
 
     // Calendar
     @Published var calendarEnabled: Bool { didSet { save(calendarEnabled, "calendarEnabled") } }       // Calendars
@@ -131,6 +144,7 @@ final class AppSettings: ObservableObject {
         notificationsEnabled = b("notificationsEnabled", false)
         notificationSeconds = n("notificationSeconds", 5.5)
         hideSystemBanners = b("hideSystemBanners", true)
+        notificationPower = NotificationPower(rawValue: s("notificationPower", "always")) ?? .always
 
         calendarEnabled = b("calendarEnabled", false)
         meetingLeadMinutes = i("meetingLeadMinutes", 10)

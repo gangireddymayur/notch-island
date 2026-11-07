@@ -173,8 +173,28 @@ final class NotchViewModel: ObservableObject {
             .sink { [weak self] in self?.headsets.setEnabled($0) }.store(in: &bag)
         settings.$bluetoothEnabled.removeDuplicates()
             .sink { [weak self] in self?.bluetooth.setEnabled($0) }.store(in: &bag)
-        settings.$notificationsEnabled.removeDuplicates()
-            .sink { [weak self] in self?.notifications.setEnabled($0) }.store(in: &bag)
+        // Island notifications can follow the charger or Low Power Mode.
+        let lowPower = NotificationCenter.default
+            .publisher(for: Notification.Name.NSProcessInfoPowerStateDidChange)
+            .map { _ in ProcessInfo.processInfo.isLowPowerModeEnabled }
+            .prepend(ProcessInfo.processInfo.isLowPowerModeEnabled)
+            .receive(on: DispatchQueue.main)
+        settings.$notificationsEnabled
+            .combineLatest(settings.$notificationPower, battery.$state.map(\.onAC).removeDuplicates(), lowPower)
+            .map { enabled, power, onAC, lowPower -> Bool in
+                guard enabled else { return false }
+                switch power {
+                case .always: return true
+                case .chargingOnly: return onAC
+                case .pauseLowPower: return !lowPower
+                }
+            }
+            .removeDuplicates()
+            .sink { [weak self] active in
+                DebugLog.write("notifications: island mirroring \(active ? "on" : "paused")")
+                self?.notifications.setEnabled(active)
+            }
+            .store(in: &bag)
         settings.$volumeHUD.combineLatest(settings.$replaceSystemHUD)
             .removeDuplicates { $0 == $1 }
             .sink { [weak self] show, replace in self?.keys.configure(showHUD: show, replaceSystem: show && replace) }
