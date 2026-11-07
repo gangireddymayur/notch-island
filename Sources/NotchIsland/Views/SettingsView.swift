@@ -369,7 +369,9 @@ private struct SettingsDetail: View {
                 Button("Open Privacy Settings") { openPrivacyPane("Privacy_ListenEvent") }
             }
         } else if let h = model.headsets.headset {
-            if h.online, let p = h.percent {
+            if h.online, h.charging, h.percent == nil {
+                LabeledContent(h.name) { Label("Charging", systemImage: "battery.100.bolt").foregroundStyle(.green) }
+            } else if h.online, let p = h.percent {
                 LabeledContent(h.name) {
                     Label("\(p)%\(h.charging ? " \u{00B7} Charging" : h.full ? " \u{00B7} Full" : "")",
                           systemImage: h.charging ? "battery.100.bolt" : "headphones")

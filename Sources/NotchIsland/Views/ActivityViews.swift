@@ -189,7 +189,8 @@ struct HeadsetChargingCard: View {
     @State private var shownPercent = 0
     @State private var appeared = false
 
-    private var target: Int { headset.full ? 100 : (headset.percent ?? 0) }
+    private var known: Bool { headset.full || headset.percent != nil }
+    private var target: Int { headset.full ? 100 : (headset.percent ?? 50) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -228,12 +229,14 @@ struct HeadsetChargingCard: View {
 
                 Spacer(minLength: 0)
 
-                Text("\(shownPercent)%")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.green)
-                    .contentTransition(.numericText(value: Double(shownPercent)))
-                    .monospacedDigit()
-                    .opacity(appeared ? 1 : 0)
+                if known {
+                    Text("\(shownPercent)%")
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(.green)
+                        .contentTransition(.numericText(value: Double(shownPercent)))
+                        .monospacedDigit()
+                        .opacity(appeared ? 1 : 0)
+                }
             }
             .padding(.horizontal, 22)
             .frame(maxHeight: .infinity)

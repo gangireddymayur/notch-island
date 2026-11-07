@@ -39,6 +39,7 @@ final class LogitechHeadsetService: ObservableObject {
     private var ready = false        // ignore the first reading after launch
     private var warned: Set<Int> = []
     private var badReadings = 0
+    private var recentWasCharging = false
     private var recent: [Int] = []
     /// The on/off state we last told you about. A card only appears once the
     /// headset has stayed in a new state for a few seconds (switching on makes
@@ -46,6 +47,13 @@ final class LogitechHeadsetService: ObservableObject {
     private var announced: Bool?
     private var announceWork: DispatchWorkItem?
     private var lastName = "Logitech Headset"
+    /// While charging, the charger lifts the battery voltage (a nearly empty
+    /// battery reads like ~70%), so we keep showing the last level measured
+    /// on battery — like G HUB does. Remembered across restarts.
+    private var lastDischargePercent: Int? {
+        get { UserDefaults.standard.object(forKey: "headsetLastPercent.\(lastName)") as? Int }
+        set { UserDefaults.standard.set(newValue, forKey: "headsetLastPercent.\(lastName)") }
+    }
 
     func setEnabled(_ on: Bool) {
         stop()
@@ -200,6 +208,9 @@ final class LogitechHeadsetService: ObservableObject {
             return
         }
         badReadings = 0
+        // Charging and on-battery voltages aren't comparable; don't average across.
+        let charging = flags != 0x01
+        if charging != recentWasCharging { recent = []; recentWasCharging = charging }
         // Voltage wobbles with volume / lights; average the last few readings.
         recent.append(voltage)
         if recent.count > 5 { recent.removeFirst() }
@@ -219,7 +230,17 @@ final class LogitechHeadsetService: ObservableObject {
         h.online = online
         h.charging = flags == 0x03
         h.full = flags == 0x07
-        h.percent = online ? Self.percent(forMillivolts: voltage) : nil
+        if !online {
+            h.percent = nil
+        } else if h.full {
+            h.percent = 100
+        } else if h.charging {
+            h.percent = lastDischargePercent      // nil if we never saw it on battery
+        } else {
+            let p = Self.percent(forMillivolts: voltage)
+            h.percent = p
+            lastDischargePercent = p
+        }
         guard h != headset else { return }
         headset = h
         DebugLog.write("headset: \(h.name) online=\(h.online) battery=\(h.percent.map { "\($0)%" } ?? "-") charging=\(h.charging)")
