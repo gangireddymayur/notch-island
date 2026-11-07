@@ -180,14 +180,14 @@ struct BatteryAlertCard: View {
 }
 
 /// Logitech headset plugged in to charge (or just finished charging).
+/// Deliberately identical to the Mac's charging card, with a headset label.
 struct HeadsetChargingCard: View {
     let headset: LogitechHeadsetService.Headset
     let notchHeight: CGFloat
 
     @State private var fill: CGFloat = 0
-    @State private var shown = 0
+    @State private var shownPercent = 0
     @State private var appeared = false
-    @State private var bounce = 0
 
     private var target: Int { headset.full ? 100 : (headset.percent ?? 0) }
 
@@ -201,67 +201,56 @@ struct HeadsetChargingCard: View {
                     .padding(.leading, 18)
                 Spacer()
                 Image(systemName: "headphones")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.green)
                     .padding(.trailing, 18)
             }
             .frame(height: notchHeight)
 
             HStack(spacing: 16) {
-                ZStack(alignment: .bottomTrailing) {
-                    Image(systemName: "headphones")
-                        .font(.system(size: 34, weight: .regular))
-                        .foregroundStyle(.white)
-                        .symbolEffect(.bounce, value: bounce)
-                    Image(systemName: "bolt.circle.fill")
-                        .font(.system(size: 17))
-                        .foregroundStyle(.black, .green)
-                        .offset(x: 6, y: 4)
-                }
-                .frame(width: 52)
-                .scaleEffect(appeared ? 1 : 0.6)
-                .opacity(appeared ? 1 : 0)
+                BigBattery(fill: fill, color: .green, showBolt: true)
+                    .frame(width: 86, height: 40)
+                    .scaleEffect(appeared ? 1 : 0.6)
+                    .opacity(appeared ? 1 : 0)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        Text(headset.full ? "Fully Charged" : "Charging")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
-                        Text(headset.name)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.5))
-                            .lineLimit(1)
-                    }
-                    BigBattery(fill: fill, color: .green, showBolt: false)
-                        .frame(width: 150, height: 22)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(headset.full ? "Fully Charged" : "Charging")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Text(headset.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 .offset(y: appeared ? 0 : 8)
                 .opacity(appeared ? 1 : 0)
 
                 Spacer(minLength: 0)
 
-                Text("\(shown)%")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                Text("\(shownPercent)%")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundStyle(.green)
+                    .contentTransition(.numericText(value: Double(shownPercent)))
                     .monospacedDigit()
-                    .contentTransition(.numericText(value: Double(shown)))
                     .opacity(appeared ? 1 : 0)
             }
             .padding(.horizontal, 22)
             .frame(maxHeight: .infinity)
             .padding(.bottom, 6)
         }
-        .onAppear {
-            shown = max(target - 20, 0)
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.75).delay(0.1)) { appeared = true }
-            withAnimation(.easeOut(duration: 1.2).delay(0.2)) { fill = CGFloat(target) / 100 }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { bounce += 1 }
-            let steps = target - shown
-            guard steps > 0 else { return }
-            for i in 1...steps {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 + 1.0 * Double(i) / Double(steps)) {
-                    withAnimation(.snappy(duration: 0.18)) { shown = min(shown + 1, target) }
-                }
+        .onAppear(perform: animateIn)
+    }
+
+    private func animateIn() {
+        shownPercent = max(target - 20, 0)
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.75).delay(0.12)) { appeared = true }
+        withAnimation(.easeOut(duration: 1.3).delay(0.2)) { fill = CGFloat(target) / 100 }
+        let steps = target - shownPercent
+        guard steps > 0 else { return }
+        for i in 1...steps {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 + 1.1 * Double(i) / Double(steps)) {
+                withAnimation(.snappy(duration: 0.18)) { shownPercent = min(shownPercent + 1, target) }
             }
         }
     }
