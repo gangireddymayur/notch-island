@@ -356,7 +356,7 @@ final class NotchViewModel: ObservableObject {
             return CGSize(width: max(n.width + extra, extra + 240), height: n.height + content)
         case .activity(let a):
             switch a.kind {
-            case .hud: return CGSize(width: n.width + 2 * 110, height: n.height)
+            case .hud: return CGSize(width: max(n.width + 190, 380), height: n.height + 52)
             case .charging: return CGSize(width: max(n.width + 220, 420), height: n.height + 92)
             case .notification: return CGSize(width: max(n.width + 260, 460), height: n.height + 84)
             default: return CGSize(width: max(n.width + 220, 420), height: n.height + 80)

@@ -281,40 +281,87 @@ struct HUDView: View {
     let level: Float
     let muted: Bool
     let notchWidth: CGFloat
-    let height: CGFloat
+    let height: CGFloat   // hardware notch height
 
-    var body: some View {
-        let shown = muted ? 0 : Double(level)
-        HStack(spacing: 0) {
-            Image(systemName: symbol, variableValue: shown)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .contentTransition(.symbolEffect(.replace))
-                .frame(width: 26)
-                .wing(.left)
-                .padding(.leading, 14)
-            Spacer(minLength: notchWidth)
-            HStack(spacing: 8) {
-                LevelBar(value: shown, color: kind == .brightness ? .yellow : .white)
-                    .frame(width: 64, height: 5)
-                Text("\(Int((shown * 100).rounded()))")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.white.opacity(0.8))
-                    .frame(width: 26, alignment: .trailing)
-                    .contentTransition(.numericText(value: shown))
-            }
-            .wing(.right)
-            .padding(.trailing, 14)
+    @State private var bump = 0
+    @State private var appeared = false
+
+    private var value: Double { muted ? 0 : Double(min(1, max(0, level))) }
+    private var percent: Int { Int((value * 100).rounded()) }
+
+    private var gradient: LinearGradient {
+        switch kind {
+        case .brightness:
+            return LinearGradient(colors: [Color(red: 1.0, green: 0.78, blue: 0.25), Color(red: 1.0, green: 0.55, blue: 0.15)],
+                                  startPoint: .leading, endPoint: .trailing)
+        case .volume:
+            return LinearGradient(colors: [.white.opacity(0.85), .white], startPoint: .leading, endPoint: .trailing)
         }
-        .frame(height: height)
-        .animation(.spring(response: 0.25, dampingFraction: 0.9), value: shown)
     }
+
+    private var glow: Color { kind == .brightness ? .orange : .white }
 
     private var symbol: String {
         switch kind {
-        case .brightness: return "sun.max.fill"
-        case .volume: return muted ? "speaker.slash.fill" : "speaker.wave.3.fill"
+        case .brightness: return value < 0.34 ? "sun.min.fill" : "sun.max.fill"
+        case .volume:
+            if muted || value == 0 { return "speaker.slash.fill" }
+            return "speaker.wave.3.fill"
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: height)   // row beside the hardware notch
+            HStack(spacing: 14) {
+                Image(systemName: symbol, variableValue: kind == .volume ? value : 1)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(muted ? AnyShapeStyle(Color.white.opacity(0.45)) : AnyShapeStyle(gradient))
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: bump)
+                    .frame(width: 30)
+
+                // Level bar with 16 steps (one per key press).
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.14))
+                        Capsule().fill(gradient)
+                            .frame(width: max(value > 0 ? 10 : 0, w * value))
+                            .shadow(color: glow.opacity(muted ? 0 : 0.55), radius: 6)
+                            .opacity(muted ? 0.35 : 1)
+                        HStack(spacing: 0) {
+                            ForEach(1..<16, id: \.self) { _ in
+                                Spacer(minLength: 0)
+                                Rectangle().fill(.black.opacity(0.28)).frame(width: 1.5)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    .clipShape(Capsule())
+                }
+                .frame(height: 10)
+                .scaleEffect(x: appeared ? 1 : 0.6, y: 1, anchor: .leading)
+
+                Text(muted ? "Muted" : "\(percent)%")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(muted ? 0.5 : 0.95))
+                    .contentTransition(.numericText(value: value))
+                    .frame(width: 58, alignment: .trailing)
+            }
+            .padding(.horizontal, 22)
+            .frame(maxHeight: .infinity)
+            .padding(.bottom, 4)
+            .opacity(appeared ? 1 : 0)
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.82), value: value)
+        .animation(.easeOut(duration: 0.2), value: muted)
+        .onChange(of: level) { _, _ in bump += 1 }
+        .onChange(of: muted) { _, _ in bump += 1 }
+        .onAppear {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8).delay(0.06)) { appeared = true }
         }
     }
 }

@@ -66,7 +66,7 @@ struct NotchRootView: View {
         case .activity(let a):
             ActivityView(model: model, activity: a)
                 .id(a.kind.isHUD ? "hud" : a.id.uuidString)
-                .transition(a.kind.isHUD ? wingTransition : islandContentTransition)
+                .transition(islandContentTransition)
         case .expanded:
             ExpandedView(model: model)
                 .transition(islandContentTransition)
