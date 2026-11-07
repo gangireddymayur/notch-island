@@ -75,10 +75,12 @@ final class LogitechHeadsetService: ObservableObject {
         DebugLog.write("headset: HID open \(String(format: "0x%08x", result))")
         manager = m
 
-        // Battery changes slowly; this also notices the headset being switched on.
-        poll = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+        // The headset doesn't announce plugging in / switching on, so ask
+        // regularly. One tiny USB report every 3 s: negligible power.
+        poll = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.query() }
         }
+        poll?.tolerance = 0.5
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
             guard let self else { return }
             self.ready = true
@@ -248,7 +250,7 @@ final class LogitechHeadsetService: ObservableObject {
                 }
                 chargeWork = work
                 // The charger flag can flicker as the cable seats; confirm first.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
             } else if h.full && !old.full {
                 DebugLog.write("headset: fully charged")
                 onCharging?(h)
