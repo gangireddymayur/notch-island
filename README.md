@@ -147,7 +147,7 @@ build.sh                    build, bundle, sign, install
 ## 🚢 Releasing
 
 ```bash
-git tag v0.3.1 && git push origin v0.3.1
+git tag v0.3.2 && git push origin v0.3.2
 ```
 
 GitHub Actions builds the app on macOS, zips it and publishes a release with a SHA-256 checksum.
