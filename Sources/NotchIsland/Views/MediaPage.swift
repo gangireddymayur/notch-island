@@ -84,7 +84,8 @@ struct PlayerView: View {
                     .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(1)
 
-                ProgressRow(info: info, canSeek: media.canSeek(info)) { media.seek(to: $0) }
+                ProgressRow(info: info, canSeek: media.canSeek(info),
+                            glow: AppSettings.shared.islandStyle == .glass) { media.seek(to: $0) }
                     .padding(.top, 4)
 
                 HStack(spacing: 10) {
@@ -92,7 +93,8 @@ struct PlayerView: View {
                         .help("Previous")
                     ControlButton(symbol: "gobackward.10", size: 15) { media.send(.skipBack) }
                         .help("Back 10 seconds")
-                    ControlButton(symbol: info.isPlaying ? "pause.fill" : "play.fill", size: 22) { media.send(.toggle) }
+                    ControlButton(symbol: info.isPlaying ? "pause.fill" : "play.fill", size: 22,
+                                  glassy: AppSettings.shared.islandStyle == .glass) { media.send(.toggle) }
                     ControlButton(symbol: "goforward.10", size: 15) { media.send(.skipForward) }
                         .help("Forward 10 seconds")
                     ControlButton(symbol: "forward.end.fill", size: 14) { media.send(.next) }
@@ -107,7 +109,11 @@ struct PlayerView: View {
 struct ProgressRow: View {
     let info: NowPlaying
     var canSeek = false
+    var glow = false      // Liquid Glass: breathing light at the playhead
     var onSeek: (Double) -> Void = { _ in }
+
+    @State private var pulse = false
+    @State private var flash = false
 
     @State private var hovering = false
     @State private var scrub: Double?   // 0…1 while dragging
@@ -128,6 +134,17 @@ struct ProgressRow: View {
                             .frame(height: active ? 7 : 4)
                         Capsule().fill(.white.opacity(0.9))
                             .frame(width: max(0, w * fraction), height: active ? 7 : 4)
+                        if glow && !active {
+                            // Breathing light at the playhead; flashes on track change / seek.
+                            Circle()
+                                .fill(RadialGradient(colors: [.white.opacity(0.95), .white.opacity(0.35), .white.opacity(0)],
+                                                     center: .center, startRadius: 0, endRadius: 11))
+                                .frame(width: 22, height: 22)
+                                .scaleEffect(flash ? 2.0 : (pulse && info.isPlaying ? 1.15 : 0.75))
+                                .opacity(flash ? 1 : (info.isPlaying ? (pulse ? 0.95 : 0.55) : 0.35))
+                                .offset(x: min(max(-11, w * fraction - 11), w - 11))
+                                .allowsHitTesting(false)
+                        }
                         if active {
                             Circle().fill(.white)
                                 .frame(width: 13, height: 13)
@@ -147,6 +164,7 @@ struct ProgressRow: View {
                             guard canSeek, w > 0 else { return }
                             let f = min(1, max(0, g.location.x / w))
                             onSeek(f * info.duration)
+                            flashGlow()
                             // Keep the knob where you dropped it until the player catches up.
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { scrub = nil }
                         })
@@ -159,6 +177,19 @@ struct ProgressRow: View {
             .font(.system(size: 10, weight: .medium, design: .monospaced))
             .animation(scrub == nil ? .linear(duration: 0.5) : nil, value: fraction)
             .animation(.easeOut(duration: 0.15), value: active)
+        }
+        .onAppear {
+            guard glow else { return }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { pulse = true }
+        }
+        .onChange(of: info.title) { _, _ in if glow { flashGlow() } }
+    }
+
+    private func flashGlow() {
+        guard glow else { return }
+        withAnimation(.easeOut(duration: 0.18)) { flash = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            withAnimation(.easeOut(duration: 0.6)) { flash = false }
         }
     }
 

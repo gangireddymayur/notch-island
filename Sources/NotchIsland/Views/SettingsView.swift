@@ -113,6 +113,9 @@ private struct SettingsDetail: View {
                     ForEach(HoverDelay.allCases) { Text($0.title).tag($0) }
                 }
                 .disabled(settings.expandOnClick)
+                Picker("Island style", selection: $settings.islandStyle) {
+                    ForEach(IslandStyle.allCases) { Text($0.title).tag($0) }
+                }
                 Picker("Island width", selection: $settings.islandWidth) {
                     ForEach(IslandWidth.allCases) { Text($0.title).tag($0) }
                 }

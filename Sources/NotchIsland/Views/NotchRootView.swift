@@ -19,6 +19,58 @@ private let wingTransition = AnyTransition.asymmetric(
     removal: .opacity.combined(with: .scale(scale: 0.7)).animation(.easeIn(duration: 0.12))
 )
 
+/// Black island, or Liquid Glass: the desktop blurred through the island with
+/// a soft light edge. The top stays black so it still merges with the camera.
+struct IslandBackground: View {
+    let shape: NotchShape
+    let glass: Bool
+    let notchHeight: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            let top = geo.size.height > 0 ? min(0.9, notchHeight / geo.size.height) : 0.3
+            ZStack {
+                if glass {
+                    BehindWindowBlur()
+                        .clipShape(shape)
+                    // Tint + black notch band fading into the glass.
+                    shape.fill(LinearGradient(stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: top * 0.85),
+                        .init(color: .black.opacity(0.42), location: min(1, top + 0.32)),
+                        .init(color: .black.opacity(0.30), location: 1),
+                    ], startPoint: .top, endPoint: .bottom))
+                    // Liquid highlight: a soft sheen across the upper glass.
+                    shape.fill(LinearGradient(colors: [.white.opacity(0.10), .white.opacity(0)],
+                                              startPoint: .top, endPoint: .center))
+                        .mask(LinearGradient(stops: [.init(color: .clear, location: top),
+                                                     .init(color: .white, location: min(1, top + 0.05))],
+                                             startPoint: .top, endPoint: .bottom))
+                    // Light edge, brightest along the lower curve like glass.
+                    shape.stroke(LinearGradient(colors: [.white.opacity(0), .white.opacity(0.18), .white.opacity(0.38)],
+                                                startPoint: .top, endPoint: .bottom), lineWidth: 1)
+                } else {
+                    shape.fill(Color.black)
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: glass)
+    }
+}
+
+/// Blurs whatever is behind the window (your wallpaper and apps).
+struct BehindWindowBlur: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let v = NSVisualEffectView()
+        v.material = .hudWindow
+        v.blendingMode = .behindWindow
+        v.state = .active               // the island never becomes key; stay frosted
+        v.appearance = NSAppearance(named: .vibrantDark)
+        return v
+    }
+    func updateNSView(_ v: NSVisualEffectView, context: Context) {}
+}
+
 struct NotchRootView: View {
     @ObservedObject var model: NotchViewModel
 
@@ -33,10 +85,12 @@ struct NotchRootView: View {
     private var island: some View {
         let size = model.shapeSize
         let shape = NotchShape(topRadius: NotchViewModel.earRadius, bottomRadius: model.bottomRadius)
+        // Liquid Glass only for the opened island and cards; the small wings
+        // live in the menu bar and stay black.
+        let glass = model.settings.islandStyle == .glass && model.isDropDown
         return ZStack(alignment: .top) {
-            shape
-                .fill(Color.black)
-                .shadow(color: .black.opacity(model.isDropDown ? 0.4 : 0), radius: 12, y: 5)
+            IslandBackground(shape: shape, glass: glass, notchHeight: model.notchSize.height)
+                .shadow(color: .black.opacity(model.isDropDown ? (glass ? 0.3 : 0.4) : 0), radius: glass ? 18 : 12, y: 5)
 
             content
                 .padding(.horizontal, NotchViewModel.earRadius)

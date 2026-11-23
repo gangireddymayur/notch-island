@@ -63,6 +63,7 @@ struct Shimmer: View {
 struct ControlButton: View {
     let symbol: String
     let size: CGFloat
+    var glassy = false     // frosted circle (Liquid Glass play button)
     let action: () -> Void
     @State private var hover = false
 
@@ -73,11 +74,38 @@ struct ControlButton: View {
                 .foregroundStyle(.white)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: size + 18, height: size + 14)
-                .background(Circle().fill(.white.opacity(hover ? 0.12 : 0)))
+                .background {
+                    if glassy {
+                        Circle()
+                            .fill(.white.opacity(hover ? 0.2 : 0.13))
+                            .overlay(Circle().strokeBorder(LinearGradient(colors: [.white.opacity(0.5), .white.opacity(0.06)],
+                                                                         startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                            .frame(width: size + 20, height: size + 20)
+                    } else {
+                        Circle().fill(.white.opacity(hover ? 0.12 : 0))
+                    }
+                }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(GlowPressStyle())
         .onHover { hover = $0 }
         .animation(.easeOut(duration: 0.15), value: hover)
+    }
+}
+
+/// A soft light blooms under the button while you press it.
+struct GlowPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                Circle()
+                    .fill(RadialGradient(colors: [.white.opacity(0.45), .white.opacity(0)],
+                                         center: .center, startRadius: 0, endRadius: 26))
+                    .frame(width: 52, height: 52)
+                    .scaleEffect(configuration.isPressed ? 1 : 0.4)
+                    .opacity(configuration.isPressed ? 1 : 0)
+            }
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 

@@ -27,6 +27,12 @@ enum NotificationPower: String, CaseIterable, Identifiable {
     }
 }
 
+enum IslandStyle: String, CaseIterable, Identifiable {
+    case classic, glass
+    var id: String { rawValue }
+    var title: String { self == .classic ? "Classic black" : "Liquid Glass" }
+}
+
 enum AccentChoice: String, CaseIterable, Identifiable {
     case system, white, green, pink, orange, purple
     var id: String { rawValue }
@@ -55,6 +61,7 @@ final class AppSettings: ObservableObject {
     @Published var expandOnClick: Bool { didSet { save(expandOnClick, "expandOnClick") } }
     @Published var islandWidth: IslandWidth { didSet { save(islandWidth.rawValue, "islandWidth") } }
     @Published var showGearInIsland: Bool { didSet { save(showGearInIsland, "showGearInIsland") } }
+    @Published var islandStyle: IslandStyle { didSet { save(islandStyle.rawValue, "islandStyle") } }
 
     // Music
     @Published var showMusic: Bool { didSet { save(showMusic, "showMusic") } }
@@ -117,6 +124,7 @@ final class AppSettings: ObservableObject {
         expandOnClick = b("expandOnClick", false)
         islandWidth = IslandWidth(rawValue: s("islandWidth", "regular")) ?? .regular
         showGearInIsland = b("showGearInIsland", true)
+        islandStyle = IslandStyle(rawValue: s("islandStyle", "classic")) ?? .classic
 
         showMusic = b("showMusic", true)
         accent = AccentChoice(rawValue: s("accent", "system")) ?? .system
