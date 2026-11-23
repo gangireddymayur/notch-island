@@ -84,8 +84,7 @@ struct PlayerView: View {
                     .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(1)
 
-                ProgressRow(info: info, canSeek: media.canSeek(info),
-                            glow: AppSettings.shared.islandStyle == .glass) { media.seek(to: $0) }
+                ProgressRow(info: info, canSeek: media.canSeek(info)) { media.seek(to: $0) }
                     .padding(.top, 4)
 
                 HStack(spacing: 10) {
